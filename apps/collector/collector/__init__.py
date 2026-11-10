@@ -1,0 +1,1 @@
+"""Visitly log collector worker."""

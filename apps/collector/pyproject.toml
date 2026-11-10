@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "visitly-collector"
+version = "0.1.0"
+description = "Nginx log collector for Visitly"
+requires-python = ">=3.10"
+dependencies = [
+  "pydantic-settings>=2.2",
+  "sqlalchemy>=2.0.25",
+  "psycopg[binary]>=3.1.18",
+  "visitly-core",
+]
+
+[project.scripts]
+visitly-collect = "collector.main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["collector*"]

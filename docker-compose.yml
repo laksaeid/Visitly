@@ -1,0 +1,58 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: visitly-pg
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-visitly}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-visitly_dev_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-visitly}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./.postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-visitly} -d ${POSTGRES_DB:-visitly}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: visitly-api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-visitly}:${POSTGRES_PASSWORD:-visitly_dev_change_me}@postgres:5432/${POSTGRES_DB:-visitly}
+    ports:
+      - "3099:3099"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: visitly-web
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+  collector:
+    build:
+      context: .
+      dockerfile: apps/collector/Dockerfile
+    container_name: visitly-collector
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-visitly}:${POSTGRES_PASSWORD:-visitly_dev_change_me}@postgres:5432/${POSTGRES_DB:-visitly}
+      VISITLY_LOG_SOURCE: ${VISITLY_LOG_SOURCE:-file}
+      VISITLY_LOG_PATH: /var/log/nginx/access.log
+    volumes:
+      - ${VISITLY_HOST_LOG_DIR:-./logs}:/var/log/nginx:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: ["collector"]

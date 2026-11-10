@@ -1,0 +1,3 @@
+-e packages/visitly_core
+-r apps/api/requirements.txt
+-r apps/collector/requirements.txt

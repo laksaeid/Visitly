@@ -1,0 +1,12 @@
+.venv
+.postgres-data
+node_modules
+**/__pycache__
+**/*.pyc
+.git
+.cursor
+collect.log
+*.db
+*.db.bak*
+*.bak-*
+apps/web/dist

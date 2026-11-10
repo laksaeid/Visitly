@@ -1,0 +1,10 @@
+Alembic migrations for the stats Postgres schema.
+
+From `apps/api`:
+
+```bash
+alembic upgrade head
+alembic revision -m "describe change"
+```
+
+`DATABASE_URL` is read from the environment / root `.env` via app settings.

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "visitly-api"
+version = "0.1.0"
+description = "Visitly FastAPI backend"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "pydantic-settings>=2.2",
+  "sqlalchemy>=2.0.25",
+  "psycopg[binary]>=3.1.18",
+  "alembic>=1.13",
+  "python-multipart>=0.0.9",
+  "visitly-core",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
