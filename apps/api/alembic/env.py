@@ -9,7 +9,14 @@ from sqlalchemy import engine_from_config, pool
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT.parents[1] / "packages" / "visitly_core" / "src"))
+_core_candidates = [
+    Path("/packages/visitly_core/src"),  # docker image layout
+    ROOT.parents[1] / "packages" / "visitly_core" / "src",  # monorepo
+]
+for _core in _core_candidates:
+    if _core.is_dir():
+        sys.path.insert(0, str(_core))
+        break
 
 from app.core.config import get_settings  # noqa: E402
 from visitly_core.db import Base  # noqa: E402
