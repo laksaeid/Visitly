@@ -25,6 +25,8 @@ chmod +x install.sh
 ./install.sh
 ```
 
+Needs Docker + Compose. Host Python 3.10+ is optional — on older OS Python (e.g. 3.6) the script bootstraps itself in a `python:3.12` container. In Iran you can set `VISITLY_MIRROR_PROFILE=iran` first.
+
 Windows:
 
 ```powershell
