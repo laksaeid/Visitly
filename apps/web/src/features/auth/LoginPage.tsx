@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { ApiError, api } from "@/shared/api/client";
+import { useLocale } from "@/shared/i18n";
+import { LangToggle } from "@/shared/ui/LangToggle";
 import { useAuth } from "./AuthContext";
 
 export function LoginPage() {
   const { user, loading, refresh, config } = useAuth();
+  const { t } = useLocale();
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -23,7 +26,7 @@ export function LoginPage() {
     try {
       const res = await api.login(username.trim(), password);
       if (!res.ok) {
-        setError("Invalid username or password.");
+        setError(t("invalidCreds"));
         setBusy(false);
         return;
       }
@@ -31,11 +34,11 @@ export function LoginPage() {
       navigate("/", { replace: true });
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
-        setError("Too many attempts. Try again in a few minutes.");
+        setError(t("tooManyAttempts"));
       } else if (err instanceof ApiError && err.status === 401) {
-        setError("Invalid username or password.");
+        setError(t("invalidCreds"));
       } else {
-        setError("Could not reach the server.");
+        setError(t("serverUnreachable"));
       }
       setBusy(false);
     }
@@ -43,16 +46,19 @@ export function LoginPage() {
 
   return (
     <div className="login-shell">
+      <div className="login-lang">
+        <LangToggle />
+      </div>
       <div className="login-box">
         <div className="brand">
           <div className="mark">V</div>
-          <h1>Visitly</h1>
-          <p className="sub">Sign in to {site} analytics</p>
+          <h1>{t("signInTitle")}</h1>
+          <p className="sub">{t("signInSub", { site })}</p>
         </div>
         <form className="login-card" onSubmit={onSubmit}>
           {error ? <div className="error">{error}</div> : null}
           <div className="field">
-            <label htmlFor="user">Username</label>
+            <label htmlFor="user">{t("username")}</label>
             <input
               id="user"
               name="user"
@@ -64,7 +70,7 @@ export function LoginPage() {
             />
           </div>
           <div className="field">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{t("password")}</label>
             <input
               id="password"
               name="password"
@@ -76,11 +82,9 @@ export function LoginPage() {
             />
           </div>
           <button className="login-submit" type="submit" disabled={busy}>
-            Sign in
+            {t("signIn")}
           </button>
-          <p className="login-hint">
-            Stats days use your configured timezone, from 00:00 to 24:00.
-          </p>
+          <p className="login-hint">{t("loginHint")}</p>
         </form>
       </div>
     </div>

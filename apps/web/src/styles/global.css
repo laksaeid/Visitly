@@ -34,6 +34,10 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+html[lang="fa"] body {
+  font-family: "Vazirmatn", "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
 a {
   color: inherit;
 }
@@ -121,7 +125,8 @@ h1 {
 
 .btn,
 .logout,
-.back {
+.back,
+.lang-toggle {
   appearance: none;
   border: 1px solid var(--line);
   background: #fff;
@@ -134,12 +139,25 @@ h1 {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
+  min-height: 36px;
 }
 
 .btn:hover,
 .logout:hover,
-.back:hover {
+.back:hover,
+.lang-toggle:hover {
   border-color: #c5d0dc;
+}
+
+.lang-toggle {
+  letter-spacing: 0.02em;
+}
+
+.login-lang {
+  position: absolute;
+  top: 18px;
+  inset-inline-end: 18px;
+  z-index: 2;
 }
 
 .nav {
@@ -459,9 +477,14 @@ th {
 
 th.num,
 td.num {
-  text-align: left;
+  text-align: start;
   font-variant-numeric: tabular-nums;
   width: 4.2rem;
+}
+
+html[dir="rtl"] th.num,
+html[dir="rtl"] td.num {
+  text-align: left;
 }
 
 th:nth-child(1),
@@ -495,8 +518,12 @@ td.name {
 
 td.name.is-host {
   direction: ltr;
-  text-align: right;
+  text-align: end;
   unicode-bidi: isolate;
+}
+
+html[dir="rtl"] td.name.is-host {
+  text-align: left;
 }
 
 td.num {
@@ -574,7 +601,7 @@ footer p {
   background: #e8eef3;
   overflow: hidden;
   vertical-align: middle;
-  margin-left: 8px;
+  margin-inline-start: 8px;
 }
 
 .share > i {
@@ -584,6 +611,7 @@ footer p {
 }
 
 .login-shell {
+  position: relative;
   min-height: 100vh;
   display: flex;
   align-items: center;

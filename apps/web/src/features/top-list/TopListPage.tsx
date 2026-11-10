@@ -3,10 +3,13 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, api } from "@/shared/api/client";
 import type { TopListPayload } from "@/shared/api/types";
 import { dayLabel, fmt } from "@/shared/dates";
+import { useLocale } from "@/shared/i18n";
+import { LangToggle } from "@/shared/ui/LangToggle";
 import { useAuth } from "@/features/auth/AuthContext";
 
 export function TopListPage() {
   const { config } = useAuth();
+  const { t, locale } = useLocale();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const kind = (params.get("kind") || "pages").toLowerCase() === "refs" ? "refs" : "pages";
@@ -43,21 +46,26 @@ export function TopListPage() {
     if (!needle) return rows;
     return rows.filter((r) => {
       const raw = String(r[data!.name_key] || "");
-      return labelRow(kind, raw).toLowerCase().includes(needle);
+      return labelRow(kind, raw, t).toLowerCase().includes(needle);
     });
-  }, [data, kind, q]);
+  }, [data, kind, q, t]);
+
+  const title = kind === "pages" ? t("topPages") : t("trafficSources");
 
   return (
-    <div className="wrap narrow">
+    <div className="wrap narrow" key={locale}>
       <header className="top">
         <div>
           <div className="eyebrow">{site.toUpperCase()}</div>
-          <h1>{data?.title || "Full list"}</h1>
-          <p className="sub">All rows for the selected day · local 00:00–24:00</p>
+          <h1>{title}</h1>
+          <p className="sub">{t("listSub")}</p>
         </div>
-        <Link className="back" to={day ? `/?day=${encodeURIComponent(day)}` : "/"}>
-          Back to dashboard
-        </Link>
+        <div className="top-actions">
+          <LangToggle />
+          <Link className="back" to={day ? `/?day=${encodeURIComponent(day)}` : "/"}>
+            {t("backDashboard")}
+          </Link>
+        </div>
       </header>
 
       <nav className="nav">
@@ -71,7 +79,7 @@ export function TopListPage() {
               setParams({ kind: "pages", ...(day ? { day } : {}) });
             }}
           >
-            Pages
+            {t("pages")}
           </a>
           <a
             href="#"
@@ -82,12 +90,12 @@ export function TopListPage() {
               setParams({ kind: "refs", ...(day ? { day } : {}) });
             }}
           >
-            Sources
+            {t("sources")}
           </a>
         </div>
         <div className="nav-day">
           <span className="day-meta">
-            {data ? `${dayLabel(data.day)}${data.is_today ? " · Today" : ""}` : "—"}
+            {data ? `${dayLabel(data.day)}${data.is_today ? t("todaySuffix") : ""}` : "—"}
           </span>
           <select
             value={data?.day || day || ""}
@@ -105,13 +113,13 @@ export function TopListPage() {
         </div>
       </nav>
 
-      {error ? <div className="error">Could not load list ({error})</div> : null}
+      {error ? <div className="error">{t("listLoadError", { error })}</div> : null}
 
       <section className="card">
         <div className="search">
           <input
             type="search"
-            placeholder="Search…"
+            placeholder={t("searchPlaceholder")}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             autoComplete="off"
@@ -120,22 +128,22 @@ export function TopListPage() {
         <p className="day-meta" style={{ margin: "0 0 8px" }}>
           {data
             ? filtered.length === (data.rows || []).length
-              ? `${data.rows.length} rows · ${fmt(data.total_views)} views`
-              : `${filtered.length} of ${data.rows.length} rows`
+              ? t("rowsViews", { rows: data.rows.length, views: fmt(data.total_views) })
+              : t("rowsOf", { filtered: filtered.length, total: data.rows.length })
             : "—"}
         </p>
         <table>
           <thead>
             <tr>
-              <th>#</th>
-              <th>{kind === "pages" ? "Page" : "Source"}</th>
-              <th className="num">Views</th>
+              <th>{t("colRank")}</th>
+              <th>{kind === "pages" ? t("colPage") : t("colSource")}</th>
+              <th className="num">{t("colViews")}</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((r, i) => {
               const raw = String(r[data!.name_key] || "");
-              const label = labelRow(kind, raw);
+              const label = labelRow(kind, raw, t);
               const total = data?.total_views || 1;
               return (
                 <tr key={`${raw}-${i}`}>
@@ -154,15 +162,15 @@ export function TopListPage() {
             })}
           </tbody>
         </table>
-        {!filtered.length ? <div className="nothing">No matches.</div> : null}
+        {!filtered.length ? <div className="nothing">{t("noMatches")}</div> : null}
       </section>
     </div>
   );
 }
 
-function labelRow(kind: string, raw: string) {
-  if (kind === "pages") return raw === "/" ? "/ (home)" : raw;
-  return raw === "Direct" ? "Direct / no referrer" : raw;
+function labelRow(kind: string, raw: string, t: (key: "homePath" | "directRef") => string) {
+  if (kind === "pages") return raw === "/" ? t("homePath") : raw;
+  return raw === "Direct" ? t("directRef") : raw;
 }
 
 function isHost(kind: string, raw: string) {

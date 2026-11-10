@@ -3,12 +3,15 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, api } from "@/shared/api/client";
 import type { OverviewPayload } from "@/shared/api/types";
 import { dayLabel, fmt, pct, shortDay } from "@/shared/dates";
+import { useLocale } from "@/shared/i18n";
 import { BarChart } from "@/shared/ui/BarChart";
 import { KpiCard } from "@/shared/ui/KpiCard";
+import { LangToggle } from "@/shared/ui/LangToggle";
 import { useAuth } from "@/features/auth/AuthContext";
 
 export function DashboardPage() {
   const { logout, config } = useAuth();
+  const { t, locale } = useLocale();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const selectedDay = params.get("day");
@@ -72,111 +75,131 @@ export function DashboardPage() {
   if (!data) {
     return (
       <div className="wrap">
-        {error ? <div className="error">Could not load stats ({error}).</div> : null}
-        <p className="sub">Loading…</p>
+        {error ? <div className="error">{t("loadError", { error })}</div> : null}
+        <p className="sub">{t("loading")}</p>
       </div>
     );
   }
 
-  const t = data.totals;
+  const totals = data.totals;
   const dt = day?.totals;
 
   return (
-    <div className="wrap">
+    <div className="wrap" key={locale}>
       <header className="top">
         <div>
           <div className="eyebrow">{site.toUpperCase()}</div>
-          <h1>Traffic stats</h1>
-          <p className="sub">
-            Unique visitors from nginx access logs · {data.timezone} (00:00–24:00)
-          </p>
+          <h1>{t("trafficStats")}</h1>
+          <p className="sub">{t("trafficSub", { timezone: data.timezone })}</p>
         </div>
         <div className="top-actions">
           <div className="live">
             <span className="dot" />
-            <span>Updated {data.generated} · every 60s</span>
+            <span>{t("updated", { time: data.generated })}</span>
           </div>
+          <LangToggle />
           <button type="button" className="logout" onClick={logout}>
-            Sign out
+            {t("signOut")}
           </button>
         </div>
       </header>
 
-      <nav className="nav" aria-label="Day picker">
+      <nav className="nav" aria-label={t("day")}>
         <div className="nav-day">
           <button type="button" disabled={dayIndex <= 0} onClick={() => dayIndex > 0 && selectDay(days[dayIndex - 1])}>
-            Previous
+            {t("previous")}
           </button>
           <button
             type="button"
             disabled={dayIndex < 0 || dayIndex >= days.length - 1}
             onClick={() => dayIndex >= 0 && dayIndex < days.length - 1 && selectDay(days[dayIndex + 1])}
           >
-            Next
+            {t("next")}
           </button>
           <button type="button" className="today-btn" onClick={() => selectDay(data.today)}>
-            Today
+            {t("today")}
           </button>
         </div>
         <div className="day-title">
           {dayLabel(dayKey)}
-          {dayKey === data.today ? " · Today" : ""}
+          {dayKey === data.today ? t("todaySuffix") : ""}
         </div>
         <div className="nav-day">
-          <label className="day-meta" htmlFor="day-select">Day</label>
+          <label className="day-meta" htmlFor="day-select">{t("day")}</label>
           <select id="day-select" value={dayKey} onChange={(e) => selectDay(e.target.value)}>
             {[...days].reverse().map((d) => (
               <option key={d} value={d}>
                 {dayLabel(d)}
-                {d === data.today ? " (today)" : ""} — {d}
+                {d === data.today ? t("todayOption") : ""} — {d}
               </option>
             ))}
           </select>
         </div>
       </nav>
 
-      {error ? (
-        <div className="error">
-          Could not load stats ({error}). Retrying in up to 60 seconds…
-        </div>
-      ) : null}
+      {error ? <div className="error">{t("loadErrorRetry", { error })}</div> : null}
 
-      <section className="kpis" aria-label="Summary">
+      <section className="kpis" aria-label={t("summary")}>
         <KpiCard
           primary
-          label="Today"
-          value={fmt(t.today.visitors)}
-          sub={`${fmt(t.today.pageviews)} pageviews · ${fmt(t.today.visitors_all)} IPs with bots`}
+          label={t("kpiToday")}
+          value={fmt(totals.today.visitors)}
+          sub={t("subPageviewsIps", {
+            pageviews: fmt(totals.today.pageviews),
+            ips: fmt(totals.today.visitors_all),
+          })}
         />
-        <KpiCard label="Yesterday" value={fmt(t.yesterday.visitors)} sub={`${fmt(t.yesterday.pageviews)} pageviews`} />
         <KpiCard
-          label="Last 7 days"
-          value={fmt(t.last7.visitors)}
-          sub={`${fmt(Math.round(t.last7.visitors / 7))} daily average`}
+          label={t("kpiYesterday")}
+          value={fmt(totals.yesterday.visitors)}
+          sub={t("subPageviews", { pageviews: fmt(totals.yesterday.pageviews) })}
         />
-        <KpiCard label="Last 30 days" value={fmt(t.last30.visitors)} sub={`${fmt(t.last30.pageviews)} pageviews`} />
-        <KpiCard label="All time" value={fmt(t.all.visitors)} sub={`Since ${dayLabel(data.since || data.today)}`} />
         <KpiCard
-          label="Returning today"
-          value={fmt(t.returning_today)}
-          sub={`${pct(t.returning_today, t.today.visitors)}% of today's visitors`}
+          label={t("kpiLast7")}
+          value={fmt(totals.last7.visitors)}
+          sub={t("subDailyAvg", { avg: fmt(Math.round(totals.last7.visitors / 7)) })}
+        />
+        <KpiCard
+          label={t("kpiLast30")}
+          value={fmt(totals.last30.visitors)}
+          sub={t("subPageviews", { pageviews: fmt(totals.last30.pageviews) })}
+        />
+        <KpiCard
+          label={t("kpiAllTime")}
+          value={fmt(totals.all.visitors)}
+          sub={t("subSince", { day: dayLabel(data.since || data.today) })}
+        />
+        <KpiCard
+          label={t("kpiReturningToday")}
+          value={fmt(totals.returning_today)}
+          sub={t("subPctToday", { pct: pct(totals.returning_today, totals.today.visitors) })}
         />
       </section>
 
       {dt ? (
-        <section className="kpis" aria-label="Selected day">
+        <section className="kpis" aria-label={t("selectedDay")}>
           <KpiCard
             primary
-            label={`${day?.is_today ? "Today" : dayLabel(dayKey)} · unique visitors`}
+            label={t("uniqueVisitors", {
+              day: day?.is_today ? t("kpiToday") : dayLabel(dayKey),
+            })}
             value={fmt(dt.visitors)}
-            sub="Local day window 00:00–24:00"
+            sub={t("dayWindow")}
           />
-          <KpiCard label="Pageviews" value={fmt(dt.pageviews)} sub={`${fmt(dt.visitors_all)} IPs including bots`} />
-          <KpiCard label="Bot pageviews" value={fmt(dt.bot_pageviews || 0)} sub={`${fmt(dt.requests || 0)} total requests`} />
           <KpiCard
-            label="Returning"
+            label={t("pageviews")}
+            value={fmt(dt.pageviews)}
+            sub={t("subIpsBots", { ips: fmt(dt.visitors_all) })}
+          />
+          <KpiCard
+            label={t("botPageviews")}
+            value={fmt(dt.bot_pageviews || 0)}
+            sub={t("subTotalRequests", { requests: fmt(dt.requests || 0) })}
+          />
+          <KpiCard
+            label={t("returning")}
             value={fmt(dt.returning || 0)}
-            sub={`${pct(dt.returning || 0, dt.visitors)}% of this day's visitors`}
+            sub={t("subPctDay", { pct: pct(dt.returning || 0, dt.visitors) })}
           />
         </section>
       ) : null}
@@ -184,10 +207,10 @@ export function DashboardPage() {
       <section className="grid">
         <article className="card">
           <div className="card-head">
-            <h2>Daily unique visitors</h2>
+            <h2>{t("dailyUniques")}</h2>
             <span className="hint">
-              {dailyRows.length >= 30 ? "Last 30 days" : `${dailyRows.length} days`}
-              {" · peak "}
+              {dailyRows.length >= 30 ? t("last30Days") : t("nDays", { n: dailyRows.length })}
+              {t("peak")}
               {fmt(Math.max(...dailyRows.map((r) => r.value), 1))}
             </span>
           </div>
@@ -198,16 +221,21 @@ export function DashboardPage() {
             labelEvery={dailyRows.length <= 10 ? 1 : dailyRows.length <= 20 ? 2 : 5}
             label={(r) => shortDay(String(r.day))}
             title={(r) =>
-              `${dayLabel(String(r.day))} — ${fmt(r.value)} unique, ${fmt(Number(r.all || 0))} IPs with bots, ${fmt(Number(r.views || 0))} pageviews`
+              t("chartUnique", {
+                day: dayLabel(String(r.day)),
+                unique: fmt(r.value),
+                ips: fmt(Number(r.all || 0)),
+                views: fmt(Number(r.views || 0)),
+              })
             }
-            empty="No data yet — the collector runs every couple of minutes."
+            empty={t("noDataCollector")}
             onClick={(r) => selectDay(String(r.day))}
           />
         </article>
         <article className="card">
           <div className="card-head">
-            <h2>Hours of day</h2>
-            <span className="hint">{dayLabel(dayKey)} · 00–24</span>
+            <h2>{t("hoursOfDay")}</h2>
+            <span className="hint">{t("hoursHint", { day: dayLabel(dayKey) })}</span>
           </div>
           <BarChart
             rows={(day?.hourly || []).map((r) => ({
@@ -219,9 +247,13 @@ export function DashboardPage() {
             labelEvery={3}
             label={(r) => String(r.label)}
             title={(r) =>
-              `${String(r.label)} — ${fmt(r.value)} unique, ${fmt(Number(r.views || 0))} pageviews`
+              t("chartHour", {
+                label: String(r.label),
+                unique: fmt(r.value),
+                views: fmt(Number(r.views || 0)),
+              })
             }
-            empty="No visits recorded for this day."
+            empty={t("noVisitsDay")}
           />
         </article>
       </section>
@@ -229,20 +261,20 @@ export function DashboardPage() {
       <section className="grid">
         <article className="card">
           <div className="card-head">
-            <h2>Top pages</h2>
-            <Link className="more-link" to={listUrl("pages")}>View all</Link>
+            <h2>{t("topPages")}</h2>
+            <Link className="more-link" to={listUrl("pages")}>{t("viewAll")}</Link>
           </div>
           <div className="hint" style={{ margin: "-6px 0 12px" }}>
-            On {dayLabel(dayKey)}
+            {t("onDay", { day: dayLabel(dayKey) })}
           </div>
           <StatsTable
             rows={day?.top_pages || []}
             nameKey="path"
             label={(raw, row) =>
               row.others
-                ? `Other (${row.others_count || 0}) — view all`
+                ? t("otherViewAll", { n: row.others_count || 0 })
                 : raw === "/"
-                  ? "/ (home)"
+                  ? t("homePath")
                   : raw
             }
             isHost={(raw) => raw.charAt(0) === "/"}
@@ -251,20 +283,20 @@ export function DashboardPage() {
         </article>
         <article className="card">
           <div className="card-head">
-            <h2>Traffic sources</h2>
-            <Link className="more-link" to={listUrl("refs")}>View all</Link>
+            <h2>{t("trafficSources")}</h2>
+            <Link className="more-link" to={listUrl("refs")}>{t("viewAll")}</Link>
           </div>
           <div className="hint" style={{ margin: "-6px 0 12px" }}>
-            On {dayLabel(dayKey)}
+            {t("onDay", { day: dayLabel(dayKey) })}
           </div>
           <StatsTable
             rows={day?.top_referers || []}
             nameKey="referer"
             label={(raw, row) =>
               row.others
-                ? `Other (${row.others_count || 0}) — view all`
+                ? t("otherViewAll", { n: row.others_count || 0 })
                 : raw === "Direct"
-                  ? "Direct / no referrer"
+                  ? t("directRef")
                   : raw
             }
             isHost={(raw) => Boolean(raw && raw !== "Direct" && raw !== "Other")}
@@ -274,13 +306,12 @@ export function DashboardPage() {
       </section>
 
       <footer>
+        <p>{t("footerUnique")}</p>
         <p>
-          A unique visitor is a distinct privacy-hashed IP with at least one non-bot pageview.
-          Bots are filtered by User-Agent. NAT and dynamic IPs make numbers directional.
-        </p>
-        <p>
-          Source: nginx access logs · timezone {data.timezone} · day window 00:00–24:00 · tracking since{" "}
-          {dayLabel(data.since || data.today)}
+          {t("footerSource", {
+            timezone: data.timezone,
+            since: dayLabel(data.since || data.today),
+          })}
         </p>
       </footer>
     </div>
@@ -300,16 +331,17 @@ function StatsTable({
   isHost: (raw: string) => boolean;
   othersHref: string;
 }) {
+  const { t } = useLocale();
   if (!rows.length) {
-    return <div className="nothing">No visits yet.</div>;
+    return <div className="nothing">{t("noVisitsYet")}</div>;
   }
   return (
     <table>
       <thead>
         <tr>
-          <th>#</th>
-          <th>Name</th>
-          <th className="num">Views</th>
+          <th>{t("colRank")}</th>
+          <th>{t("colName")}</th>
+          <th className="num">{t("colViews")}</th>
         </tr>
       </thead>
       <tbody>
