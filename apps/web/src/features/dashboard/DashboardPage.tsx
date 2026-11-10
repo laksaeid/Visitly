@@ -155,26 +155,29 @@ export function DashboardPage() {
             <span className="size-1.5 rounded-full bg-primary" />
             {t("updated", { time: data.generated })}
           </Badge>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={dayIndex <= 0}
-            onClick={() => dayIndex > 0 && selectDay(days[dayIndex - 1])}
-          >
-            <ChevronLeft />
-            {t("previous")}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={dayIndex < 0 || dayIndex >= days.length - 1}
-            onClick={() => dayIndex >= 0 && dayIndex < days.length - 1 && selectDay(days[dayIndex + 1])}
-          >
-            {t("next")}
-            <ChevronRight />
-          </Button>
+          {/* Keep chronological prev/next order in RTL (older ← → newer). */}
+          <div className="flex items-center gap-2" dir="ltr">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={dayIndex <= 0}
+              onClick={() => dayIndex > 0 && selectDay(days[dayIndex - 1])}
+            >
+              <ChevronLeft />
+              {t("previous")}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={dayIndex < 0 || dayIndex >= days.length - 1}
+              onClick={() => dayIndex >= 0 && dayIndex < days.length - 1 && selectDay(days[dayIndex + 1])}
+            >
+              {t("next")}
+              <ChevronRight />
+            </Button>
+          </div>
           <Button type="button" size="sm" onClick={() => selectDay(data.today)}>
             {t("today")}
           </Button>
