@@ -51,64 +51,59 @@ export function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-4 py-8">
+    <div className="relative flex min-h-screen items-center justify-center bg-muted/30 px-4">
       <div className="absolute top-4 end-4">
         <LangToggle />
       </div>
-      <div className="w-full max-w-md space-y-6">
-        <div className="space-y-3 text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary font-mono text-lg font-bold text-primary-foreground shadow-md">
+      <Card className="w-full max-w-sm shadow-none">
+        <CardHeader className="space-y-3 text-center">
+          <div className="mx-auto flex size-10 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
             V
           </div>
-          <div>
-            <h1 className="font-mono text-2xl font-bold tracking-tight">{t("signInTitle")}</h1>
-            <p className="mt-1 text-sm text-muted-foreground">{t("signInSub", { site })}</p>
+          <div className="space-y-1">
+            <CardTitle className="text-xl">{t("signInTitle")}</CardTitle>
+            <CardDescription>{t("signInSub", { site })}</CardDescription>
           </div>
-        </div>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t("signIn")}</CardTitle>
-            <CardDescription>{t("loginHint")}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={onSubmit}>
-              {error ? (
-                <Alert variant="destructive">
-                  <AlertCircle />
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              ) : null}
-              <div className="space-y-2">
-                <Label htmlFor="user">{t("username")}</Label>
-                <Input
-                  id="user"
-                  name="user"
-                  autoComplete="username"
-                  required
-                  autoFocus
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">{t("password")}</Label>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              <Button className="w-full" variant="accent" type="submit" disabled={busy} aria-busy={busy}>
-                {t("signIn")}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-4" onSubmit={onSubmit}>
+            {error ? (
+              <Alert variant="destructive">
+                <AlertCircle />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="user">{t("username")}</Label>
+              <Input
+                id="user"
+                name="user"
+                autoComplete="username"
+                required
+                autoFocus
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">{t("password")}</Label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <Button className="w-full" type="submit" disabled={busy} aria-busy={busy}>
+              {t("signIn")}
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">{t("loginHint")}</p>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

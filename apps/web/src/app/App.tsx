@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { AppShell } from "@/components/layout/AppShell";
 import { AuthProvider } from "@/features/auth/AuthContext";
 import { LocaleBridge } from "@/features/auth/LocaleBridge";
 import { LoginPage } from "@/features/auth/LoginPage";
@@ -13,8 +14,10 @@ export function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/list" element={<TopListPage />} />
+            <Route element={<AppShell />}>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/list" element={<TopListPage />} />
+            </Route>
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -94,6 +94,13 @@ export const messages = {
     subPageviewsAll: "{pageviews} pageviews · {ips} total IPs",
     footerUniqueBots:
       "With bots enabled, unique visitors include privacy-hashed IPs that made page requests from bots or humans. Bot detection uses User-Agent patterns.",
+    navOverview: "Overview",
+    navPages: "Pages",
+    navSources: "Sources",
+    navSection: "Analytics",
+    openMenu: "Open menu",
+    dashboard: "Dashboard",
+    selectedDayKpis: "Selected day",
   },
   fa: {
     trafficStats: "آمار ترافیک",
@@ -188,6 +195,13 @@ export const messages = {
     filterHintHumans: "نمایش ترافیک انسانی (پیش‌فرض)",
     filterHintBots: "نمایش ترافیک انسان + ربات",
     subPageviewsAll: "{pageviews} بازدید صفحه · {ips} آی‌پی کل",
+    navOverview: "نمای کلی",
+    navPages: "صفحات",
+    navSources: "منابع",
+    navSection: "آمار",
+    openMenu: "باز کردن منو",
+    dashboard: "داشبورد",
+    selectedDayKpis: "روز انتخاب‌شده",
   },
 } as const;
 

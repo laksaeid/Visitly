@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { AlertCircle, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,15 +20,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useAuth } from "@/features/auth/AuthContext";
 import { ApiError, api } from "@/shared/api/client";
 import type { OverviewPayload } from "@/shared/api/types";
 import { dayLabel, fmt, pct, shortDay } from "@/shared/dates";
 import { useLocale } from "@/shared/i18n";
 import { BarChart } from "@/shared/ui/BarChart";
-import { BotFilter } from "@/shared/ui/BotFilter";
 import { KpiCard } from "@/shared/ui/KpiCard";
-import { LangToggle } from "@/shared/ui/LangToggle";
 
 function readBotsParam(params: URLSearchParams) {
   const v = (params.get("bots") || "").toLowerCase();
@@ -36,7 +33,6 @@ function readBotsParam(params: URLSearchParams) {
 }
 
 export function DashboardPage() {
-  const { logout, config } = useAuth();
   const { t, locale } = useLocale();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
@@ -44,7 +40,6 @@ export function DashboardPage() {
   const includeBots = readBotsParam(params);
   const [data, setData] = useState<OverviewPayload | null>(null);
   const [error, setError] = useState("");
-  const site = config?.site_name || "Visitly";
 
   const patchParams = useCallback(
     (patch: Record<string, string | null>, replace = false) => {
@@ -91,10 +86,6 @@ export function DashboardPage() {
     patchParams({ day: dayValue, bots: includeBots ? "1" : null });
   };
 
-  const setIncludeBots = (next: boolean) => {
-    patchParams({ day: dayKey || null, bots: next ? "1" : null });
-  };
-
   const listUrl = (kind: string) => {
     const q = new URLSearchParams({ kind });
     if (dayKey) q.set("day", dayKey);
@@ -117,9 +108,9 @@ export function DashboardPage() {
 
   if (!data) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-8">
+      <div className="space-y-4 p-4 md:p-6">
         {error ? (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive">
             <AlertCircle />
             <AlertDescription>{t("loadError", { error })}</AlertDescription>
           </Alert>
@@ -134,83 +125,55 @@ export function DashboardPage() {
   const pvSubKey = includeBots ? "subPageviewsAll" : "subPageviewsIps";
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 px-4 py-6" key={locale}>
-      <header className="flex flex-wrap items-end justify-between gap-4">
+    <div className="space-y-4 p-4 md:p-6" key={locale}>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-1">
-          <Badge variant="secondary" className="font-mono uppercase tracking-wider">
-            {site}
-          </Badge>
-          <h1 className="font-mono text-3xl font-bold tracking-tight">{t("trafficStats")}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("trafficStats")}</h1>
           <p className="text-sm text-muted-foreground">{t("trafficSub", { timezone: data.timezone })}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline" className="gap-2 py-1.5">
-            <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
+          <Badge variant="outline" className="h-8 gap-2 font-normal">
+            <span className="size-1.5 rounded-full bg-emerald-500" />
             {t("updated", { time: data.generated })}
           </Badge>
-          <LangToggle />
-          <Button type="button" variant="outline" size="sm" onClick={logout}>
-            <LogOut />
-            {t("signOut")}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={dayIndex <= 0}
+            onClick={() => dayIndex > 0 && selectDay(days[dayIndex - 1])}
+          >
+            <ChevronLeft className="size-4" />
+            {t("previous")}
           </Button>
-        </div>
-      </header>
-
-      <Card className="py-3">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 px-4">
-          <BotFilter includeBots={includeBots} onChange={setIncludeBots} />
-          <p className="text-xs text-muted-foreground">
-            {includeBots ? t("filterHintBots") : t("filterHintHumans")}
-          </p>
-        </CardContent>
-      </Card>
-
-      <Card className="py-3">
-        <CardContent className="flex flex-wrap items-center justify-between gap-3 px-4">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={dayIndex <= 0}
-              onClick={() => dayIndex > 0 && selectDay(days[dayIndex - 1])}
-            >
-              <ChevronLeft />
-              {t("previous")}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={dayIndex < 0 || dayIndex >= days.length - 1}
-              onClick={() => dayIndex >= 0 && dayIndex < days.length - 1 && selectDay(days[dayIndex + 1])}
-            >
-              {t("next")}
-              <ChevronRight />
-            </Button>
-            <Button type="button" variant="accent" size="sm" onClick={() => selectDay(data.today)}>
-              {t("today")}
-            </Button>
-          </div>
-          <div className="font-mono text-sm font-semibold">
-            {dayLabel(dayKey)}
-            {dayKey === data.today ? t("todaySuffix") : ""}
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={dayIndex < 0 || dayIndex >= days.length - 1}
+            onClick={() => dayIndex >= 0 && dayIndex < days.length - 1 && selectDay(days[dayIndex + 1])}
+          >
+            {t("next")}
+            <ChevronRight className="size-4" />
+          </Button>
+          <Button type="button" size="sm" onClick={() => selectDay(data.today)}>
+            {t("today")}
+          </Button>
           <Select value={dayKey} onValueChange={selectDay}>
-            <SelectTrigger className="min-w-48">
+            <SelectTrigger className="h-8 w-[200px]">
               <SelectValue placeholder={t("day")} />
             </SelectTrigger>
             <SelectContent>
               {[...days].reverse().map((d) => (
                 <SelectItem key={d} value={d}>
                   {dayLabel(d)}
-                  {d === data.today ? t("todayOption") : ""} — {d}
+                  {d === data.today ? t("todayOption") : ""}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {error ? (
         <Alert variant="destructive">
@@ -219,9 +182,8 @@ export function DashboardPage() {
         </Alert>
       ) : null}
 
-      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6" aria-label={t("summary")}>
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6" aria-label={t("summary")}>
         <KpiCard
-          primary
           label={t("kpiToday")}
           value={fmt(totals.today.visitors)}
           sub={t(pvSubKey, {
@@ -257,9 +219,8 @@ export function DashboardPage() {
       </section>
 
       {dt ? (
-        <section className="grid grid-cols-2 gap-3 md:grid-cols-4" aria-label={t("selectedDay")}>
+        <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("selectedDayKpis")}>
           <KpiCard
-            primary
             label={t("uniqueVisitors", { day: day?.is_today ? t("kpiToday") : dayLabel(dayKey) })}
             value={fmt(dt.visitors)}
             sub={t("dayWindow")}
@@ -285,17 +246,15 @@ export function DashboardPage() {
         </section>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <Card>
-          <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
-            <div>
-              <CardTitle>{t("dailyUniques")}</CardTitle>
-              <CardDescription>
-                {dailyRows.length >= 30 ? t("last30Days") : t("nDays", { n: dailyRows.length })}
-                {t("peak")}
-                {fmt(Math.max(...dailyRows.map((r) => r.value), 1))}
-              </CardDescription>
-            </div>
+      <section className="grid gap-4 xl:grid-cols-7">
+        <Card className="shadow-none xl:col-span-4">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{t("dailyUniques")}</CardTitle>
+            <CardDescription>
+              {dailyRows.length >= 30 ? t("last30Days") : t("nDays", { n: dailyRows.length })}
+              {t("peak")}
+              {fmt(Math.max(...dailyRows.map((r) => r.value), 1))}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <BarChart
@@ -316,9 +275,10 @@ export function DashboardPage() {
             />
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("hoursOfDay")}</CardTitle>
+
+        <Card className="shadow-none xl:col-span-3">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{t("hoursOfDay")}</CardTitle>
             <CardDescription>{t("hoursHint", { day: dayLabel(dayKey) })}</CardDescription>
           </CardHeader>
           <CardContent>
@@ -344,7 +304,7 @@ export function DashboardPage() {
         </Card>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid gap-4 xl:grid-cols-2">
         <StatsCard
           title={t("topPages")}
           hint={t("onDay", { day: dayLabel(dayKey) })}
@@ -379,15 +339,13 @@ export function DashboardPage() {
         />
       </section>
 
-      <footer className="space-y-2 pb-6 text-xs leading-relaxed text-muted-foreground">
-        <p>{includeBots ? t("footerUniqueBots") : t("footerUnique")}</p>
-        <p>
-          {t("footerSource", {
-            timezone: data.timezone,
-            since: dayLabel(data.since || data.today),
-          })}
-        </p>
-      </footer>
+      <p className="pb-2 text-xs text-muted-foreground leading-relaxed">
+        {includeBots ? t("footerUniqueBots") : t("footerUnique")}{" "}
+        {t("footerSource", {
+          timezone: data.timezone,
+          since: dayLabel(data.since || data.today),
+        })}
+      </p>
     </div>
   );
 }
@@ -413,19 +371,19 @@ function StatsCard({
 }) {
   const { t } = useLocale();
   return (
-    <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+    <Card className="shadow-none">
+      <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
         <div>
-          <CardTitle>{title}</CardTitle>
+          <CardTitle className="text-base">{title}</CardTitle>
           <CardDescription>{hint}</CardDescription>
         </div>
-        <Button asChild variant="link" size="sm" className="px-0">
+        <Button asChild variant="ghost" size="sm">
           <Link to={href}>{viewAll}</Link>
         </Button>
       </CardHeader>
       <CardContent>
         {!rows.length ? (
-          <div className="py-8 text-center text-sm text-muted-foreground">{t("noVisitsYet")}</div>
+          <div className="py-10 text-center text-sm text-muted-foreground">{t("noVisitsYet")}</div>
         ) : (
           <Table>
             <TableHeader>
@@ -442,7 +400,7 @@ function StatsCard({
                 const text = label(raw, r);
                 return (
                   <TableRow key={`${raw}-${i}`}>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
+                    <TableCell className="text-xs text-muted-foreground tabular-nums">
                       {isOthers ? "…" : String(i + 1).padStart(2, "0")}
                     </TableCell>
                     <TableCell
@@ -454,14 +412,14 @@ function StatsCard({
                       title={text}
                     >
                       {isOthers ? (
-                        <Link className="font-medium text-primary hover:underline" to={href}>
+                        <Link className="font-medium hover:underline" to={href}>
                           {text}
                         </Link>
                       ) : (
                         text
                       )}
                     </TableCell>
-                    <TableCell className="text-end font-semibold tabular-nums">
+                    <TableCell className="text-end tabular-nums font-medium">
                       {fmt(Number(r.views || 0))}
                     </TableCell>
                   </TableRow>
