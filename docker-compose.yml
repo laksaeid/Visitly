@@ -39,6 +39,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Optional separate static front (API image already embeds the SPA)
   web:
     build:
       context: .

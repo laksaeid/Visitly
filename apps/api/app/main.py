@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -11,7 +12,24 @@ from app.core.config import get_settings
 from app.routers import auth, public, stats
 
 settings = get_settings()
-WEB_DIST = Path(__file__).resolve().parents[2] / "web" / "dist"
+
+
+def _resolve_web_dist() -> Path:
+    env = os.environ.get("VISITLY_WEB_DIST")
+    if env:
+        return Path(env)
+    here = Path(__file__).resolve()
+    candidates = [
+        here.parents[2] / "web" / "dist",  # monorepo: apps/web/dist
+        Path("/app/web/dist"),             # docker image layout
+    ]
+    for c in candidates:
+        if c.is_dir():
+            return c
+    return candidates[0]
+
+
+WEB_DIST = _resolve_web_dist()
 
 
 def create_app() -> FastAPI:
