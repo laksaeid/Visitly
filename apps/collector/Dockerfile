@@ -2,8 +2,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+ARG PIP_INDEX_URL=https://mirror.arvancloud.ir/pypi/simple
+ARG PIP_TRUSTED_HOST=mirror.arvancloud.ir
+
 ENV PIP_DEFAULT_TIMEOUT=120 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_INDEX_URL=${PIP_INDEX_URL} \
+    PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} \
     PYTHONUNBUFFERED=1
 
 COPY packages/visitly_core /packages/visitly_core

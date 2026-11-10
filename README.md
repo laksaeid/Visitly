@@ -38,8 +38,13 @@ DATABASE_URL=postgresql+psycopg://visitly:visitly_dev_change_me@localhost:5432/v
 
 ### 2. Run with Docker Compose
 
+Docker builds default to the **Arvan Iran mirrors** for PyPI/npm (override with `PIP_INDEX_URL` / `NPM_REGISTRY` in `.env`).
+
 ```bash
-docker compose up -d postgres api web
+# optional: confirm mirror works
+curl -I https://mirror.arvancloud.ir/pypi/simple/pip/
+
+docker compose up -d --build postgres api web
 # optional collector (mount host logs via VISITLY_HOST_LOG_DIR)
 docker compose --profile collector up -d collector
 ```

@@ -20,6 +20,9 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirror.arvancloud.ir/pypi/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirror.arvancloud.ir}
     container_name: visitly-api
     env_file: .env
     environment:
@@ -34,6 +37,8 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://mirror.arvancloud.ir/npm/}
     container_name: visitly-web
     ports:
       - "8080:80"
@@ -44,6 +49,9 @@ services:
     build:
       context: .
       dockerfile: apps/collector/Dockerfile
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirror.arvancloud.ir/pypi/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirror.arvancloud.ir}
     container_name: visitly-collector
     env_file: .env
     environment:
