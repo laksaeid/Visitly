@@ -1,9 +1,21 @@
 import { NavLink, useLocation, useSearchParams } from "react-router-dom";
-import { Activity, FileText, Globe2, LogOut, PanelLeft } from "lucide-react";
+import { Activity, FileText, GalleryVerticalEnd, Globe2, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  SidebarSeparator,
+} from "@/components/ui/sidebar";
 import { useAuth } from "@/features/auth/AuthContext";
-import { cn } from "@/lib/utils";
 import { useLocale } from "@/shared/i18n";
 import { BotFilter } from "@/shared/ui/BotFilter";
 import { LangToggle } from "@/shared/ui/LangToggle";
@@ -14,11 +26,10 @@ function readBots(params: URLSearchParams) {
 }
 
 type Props = {
-  onNavigate?: () => void;
-  className?: string;
+  side?: "left" | "right";
 };
 
-export function AppSidebar({ onNavigate, className }: Props) {
+export function AppSidebar({ side = "left" }: Props) {
   const { logout, config } = useAuth();
   const { t } = useLocale();
   const location = useLocation();
@@ -67,62 +78,67 @@ export function AppSidebar({ onNavigate, className }: Props) {
   ];
 
   return (
-    <aside className={cn("flex h-full w-64 flex-col bg-sidebar text-sidebar-foreground", className)}>
-      <div className="flex h-14 items-center gap-2 border-b px-4">
-        <div className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <PanelLeft className="size-4" />
-        </div>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-semibold tracking-tight">Visitly</div>
-          <div className="truncate text-xs text-muted-foreground">{site}</div>
-        </div>
-      </div>
+    <Sidebar collapsible="icon" side={side}>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <NavLink to={withQs("/")}>
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                  <GalleryVerticalEnd />
+                </div>
+                <div className="grid flex-1 text-start text-sm leading-tight">
+                  <span className="truncate font-medium">Visitly</span>
+                  <span className="truncate text-xs">{site}</span>
+                </div>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
 
-      <div className="flex-1 overflow-y-auto px-3 py-4">
-        <div className="mb-2 px-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          {t("navSection")}
-        </div>
-        <nav className="space-y-1">
-          {items.map((item) => (
-            <NavLink
-              key={item.label}
-              to={item.to}
-              onClick={onNavigate}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium transition-colors cursor-pointer",
-                item.active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-muted-foreground hover:bg-sidebar-accent/70 hover:text-foreground",
-              )}
-            >
-              <item.icon className="size-4 shrink-0" />
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>{t("navSection")}</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {items.map((item) => (
+                <SidebarMenuItem key={item.label}>
+                  <SidebarMenuButton asChild isActive={item.active} tooltip={item.label}>
+                    <NavLink to={item.to}>
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
-        <Separator className="my-4" />
+        <SidebarSeparator />
 
-        <div className="space-y-2 px-1">
-          <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            {t("filterAria")}
-          </div>
-          <BotFilter includeBots={includeBots} onChange={setIncludeBots} />
-          <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
-            {includeBots ? t("filterHintBots") : t("filterHintHumans")}
-          </p>
-        </div>
-      </div>
+        <SidebarGroup className="group-data-[collapsible=icon]:hidden">
+          <SidebarGroupLabel>{t("filterAria")}</SidebarGroupLabel>
+          <SidebarGroupContent className="flex flex-col gap-2 px-2">
+            <BotFilter includeBots={includeBots} onChange={setIncludeBots} />
+            <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+              {includeBots ? t("filterHintBots") : t("filterHintHumans")}
+            </p>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
 
-      <div className="space-y-2 border-t p-3">
-        <div className="flex items-center gap-2">
+      <SidebarFooter>
+        <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col">
           <LangToggle />
           <Button type="button" variant="outline" size="sm" className="flex-1" onClick={logout}>
-            <LogOut className="size-4" />
-            {t("signOut")}
+            <LogOut />
+            <span className="group-data-[collapsible=icon]:hidden">{t("signOut")}</span>
           </Button>
         </div>
-      </div>
-    </aside>
+      </SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
   );
 }

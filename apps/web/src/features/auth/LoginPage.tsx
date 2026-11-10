@@ -4,8 +4,9 @@ import { AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Spinner } from "@/components/ui/spinner";
 import { ApiError, api } from "@/shared/api/client";
 import { useLocale } from "@/shared/i18n";
 import { LangToggle } from "@/shared/ui/LangToggle";
@@ -56,51 +57,54 @@ export function LoginPage() {
         <LangToggle />
       </div>
       <Card className="w-full max-w-sm shadow-none">
-        <CardHeader className="space-y-3 text-center">
+        <CardHeader className="text-center">
           <div className="mx-auto flex size-10 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
             V
           </div>
-          <div className="space-y-1">
-            <CardTitle className="text-xl">{t("signInTitle")}</CardTitle>
-            <CardDescription>{t("signInSub", { site })}</CardDescription>
-          </div>
+          <CardTitle className="text-xl">{t("signInTitle")}</CardTitle>
+          <CardDescription>{t("signInSub", { site })}</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4" onSubmit={onSubmit}>
-            {error ? (
-              <Alert variant="destructive">
-                <AlertCircle />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            ) : null}
-            <div className="space-y-2">
-              <Label htmlFor="user">{t("username")}</Label>
-              <Input
-                id="user"
-                name="user"
-                autoComplete="username"
-                required
-                autoFocus
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">{t("password")}</Label>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <Button className="w-full" type="submit" disabled={busy} aria-busy={busy}>
-              {t("signIn")}
-            </Button>
-            <p className="text-center text-xs text-muted-foreground">{t("loginHint")}</p>
+          <form onSubmit={onSubmit}>
+            <FieldGroup>
+              {error ? (
+                <Alert variant="destructive">
+                  <AlertCircle />
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              ) : null}
+              <Field data-invalid={error ? true : undefined}>
+                <FieldLabel htmlFor="user">{t("username")}</FieldLabel>
+                <Input
+                  id="user"
+                  name="user"
+                  autoComplete="username"
+                  required
+                  autoFocus
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  aria-invalid={error ? true : undefined}
+                />
+              </Field>
+              <Field data-invalid={error ? true : undefined}>
+                <FieldLabel htmlFor="password">{t("password")}</FieldLabel>
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  aria-invalid={error ? true : undefined}
+                />
+              </Field>
+              <Button className="w-full" type="submit" disabled={busy} aria-busy={busy}>
+                {busy ? <Spinner /> : null}
+                {t("signIn")}
+              </Button>
+              <p className="text-center text-xs text-muted-foreground">{t("loginHint")}</p>
+            </FieldGroup>
           </form>
         </CardContent>
       </Card>

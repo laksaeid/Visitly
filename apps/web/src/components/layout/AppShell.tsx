@@ -1,45 +1,48 @@
-import { useState } from "react";
-import { Outlet } from "react-router-dom";
-import { Menu } from "lucide-react";
+import { Outlet, useLocation } from "react-router-dom";
 import { AppSidebar } from "@/components/layout/AppSidebar";
-import { Button } from "@/components/ui/button";
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbList,
+  BreadcrumbPage,
+} from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { useLocale } from "@/shared/i18n";
 
 export function AppShell() {
-  const { t } = useLocale();
-  const [open, setOpen] = useState(false);
+  const { t, locale } = useLocale();
+  const location = useLocation();
+  const title =
+    location.pathname === "/list"
+      ? new URLSearchParams(location.search).get("kind") === "refs"
+        ? t("navSources")
+        : t("navPages")
+      : t("navOverview");
 
   return (
-    <div className="flex min-h-screen w-full bg-background">
-      <div className="hidden border-e md:block">
-        <AppSidebar />
-      </div>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden">
-          <Sheet open={open} onOpenChange={setOpen}>
-            <SheetTrigger asChild>
-              <Button type="button" variant="outline" size="icon" aria-label={t("openMenu")}>
-                <Menu className="size-4" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-72 p-0">
-              <SheetHeader className="sr-only">
-                <SheetTitle>{t("dashboard")}</SheetTitle>
-              </SheetHeader>
-              <AppSidebar onNavigate={() => setOpen(false)} className="w-full border-0" />
-            </SheetContent>
-          </Sheet>
-          <Separator orientation="vertical" className="h-5" />
-          <div className="text-sm font-semibold">{t("dashboard")}</div>
+    <SidebarProvider>
+      <AppSidebar side={locale === "fa" ? "right" : "left"} />
+      <SidebarInset>
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger className="-ms-1" />
+          <Separator orientation="vertical" className="me-2 data-[orientation=vertical]:h-4" />
+          <Breadcrumb>
+            <BreadcrumbList>
+              <BreadcrumbItem>
+                <BreadcrumbPage>{title}</BreadcrumbPage>
+              </BreadcrumbItem>
+            </BreadcrumbList>
+          </Breadcrumb>
         </header>
-
-        <main className="flex-1 overflow-auto">
+        <div className="flex flex-1 flex-col">
           <Outlet />
-        </main>
-      </div>
-    </div>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }

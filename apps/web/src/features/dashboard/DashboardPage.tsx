@@ -1,17 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertCircle, ChevronLeft, ChevronRight, SearchX } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -43,33 +51,39 @@ export function DashboardPage() {
 
   const patchParams = useCallback(
     (patch: Record<string, string | null>, replace = false) => {
-      setParams((prev) => {
-        const next = new URLSearchParams(prev);
-        for (const [k, v] of Object.entries(patch)) {
-          if (v === null || v === "") next.delete(k);
-          else next.set(k, v);
-        }
-        return next;
-      }, { replace });
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          for (const [k, v] of Object.entries(patch)) {
+            if (v === null || v === "") next.delete(k);
+            else next.set(k, v);
+          }
+          return next;
+        },
+        { replace },
+      );
     },
     [setParams],
   );
 
-  const load = useCallback(async (day?: string | null, bots = false) => {
-    try {
-      const payload = await api.overview(day, bots);
-      setData(payload);
-      setError("");
-      const next = payload.selected_day;
-      if (next && next !== day) patchParams({ day: next }, true);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        navigate("/login", { replace: true });
-        return;
+  const load = useCallback(
+    async (day?: string | null, bots = false) => {
+      try {
+        const payload = await api.overview(day, bots);
+        setData(payload);
+        setError("");
+        const next = payload.selected_day;
+        if (next && next !== day) patchParams({ day: next }, true);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          navigate("/login", { replace: true });
+          return;
+        }
+        setError(err instanceof Error ? err.message : "network error");
       }
-      setError(err instanceof Error ? err.message : "network error");
-    }
-  }, [navigate, patchParams]);
+    },
+    [navigate, patchParams],
+  );
 
   useEffect(() => {
     void load(selectedDay, includeBots);
@@ -108,14 +122,19 @@ export function DashboardPage() {
 
   if (!data) {
     return (
-      <div className="space-y-4 p-4 md:p-6">
+      <div className="flex flex-col gap-4 p-4 md:p-6">
         {error ? (
           <Alert variant="destructive">
             <AlertCircle />
             <AlertDescription>{t("loadError", { error })}</AlertDescription>
           </Alert>
         ) : null}
-        <p className="text-sm text-muted-foreground">{t("loading")}</p>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-72 w-full" />
       </div>
     );
   }
@@ -125,15 +144,15 @@ export function DashboardPage() {
   const pvSubKey = includeBots ? "subPageviewsAll" : "subPageviewsIps";
 
   return (
-    <div className="space-y-4 p-4 md:p-6" key={locale}>
+    <div className="flex flex-col gap-4 p-4 md:p-6" key={locale}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">{t("trafficStats")}</h1>
           <p className="text-sm text-muted-foreground">{t("trafficSub", { timezone: data.timezone })}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="outline" className="h-8 gap-2 font-normal">
-            <span className="size-1.5 rounded-full bg-emerald-500" />
+            <span className="size-1.5 rounded-full bg-primary" />
             {t("updated", { time: data.generated })}
           </Badge>
           <Button
@@ -143,7 +162,7 @@ export function DashboardPage() {
             disabled={dayIndex <= 0}
             onClick={() => dayIndex > 0 && selectDay(days[dayIndex - 1])}
           >
-            <ChevronLeft className="size-4" />
+            <ChevronLeft />
             {t("previous")}
           </Button>
           <Button
@@ -154,7 +173,7 @@ export function DashboardPage() {
             onClick={() => dayIndex >= 0 && dayIndex < days.length - 1 && selectDay(days[dayIndex + 1])}
           >
             {t("next")}
-            <ChevronRight className="size-4" />
+            <ChevronRight />
           </Button>
           <Button type="button" size="sm" onClick={() => selectDay(data.today)}>
             {t("today")}
@@ -164,12 +183,14 @@ export function DashboardPage() {
               <SelectValue placeholder={t("day")} />
             </SelectTrigger>
             <SelectContent>
-              {[...days].reverse().map((d) => (
-                <SelectItem key={d} value={d}>
-                  {dayLabel(d)}
-                  {d === data.today ? t("todayOption") : ""}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {[...days].reverse().map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {dayLabel(d)}
+                    {d === data.today ? t("todayOption") : ""}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
         </div>
@@ -258,9 +279,7 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent>
             <BarChart
-              few={dailyRows.length <= 10}
               rows={dailyRows}
-              labelEvery={dailyRows.length <= 10 ? 1 : dailyRows.length <= 20 ? 2 : 5}
               label={(r) => shortDay(String(r.day))}
               title={(r) =>
                 t("chartUnique", {
@@ -289,7 +308,6 @@ export function DashboardPage() {
                 label: r.label,
                 views: r.pageviews,
               }))}
-              labelEvery={3}
               label={(r) => String(r.label)}
               title={(r) =>
                 t("chartHour", {
@@ -372,8 +390,8 @@ function StatsCard({
   const { t } = useLocale();
   return (
     <Card className="shadow-none">
-      <CardHeader className="flex-row items-center justify-between space-y-0 pb-2">
-        <div>
+      <CardHeader className="flex-row items-center justify-between pb-2">
+        <div className="flex flex-col gap-1">
           <CardTitle className="text-base">{title}</CardTitle>
           <CardDescription>{hint}</CardDescription>
         </div>
@@ -383,7 +401,14 @@ function StatsCard({
       </CardHeader>
       <CardContent>
         {!rows.length ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">{t("noVisitsYet")}</div>
+          <Empty className="border-0 py-8">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <SearchX />
+              </EmptyMedia>
+              <EmptyTitle className="text-sm font-medium">{t("noVisitsYet")}</EmptyTitle>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <Table>
             <TableHeader>

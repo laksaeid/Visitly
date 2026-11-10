@@ -1,16 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, SearchX } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -93,9 +102,9 @@ export function TopListPage() {
   const title = kind === "pages" ? t("topPages") : t("trafficSources");
 
   return (
-    <div className="space-y-4 p-4 md:p-6" key={locale}>
+    <div className="flex flex-col gap-4 p-4 md:p-6" key={locale}>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-1">
+        <div className="flex flex-col gap-1">
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           <p className="text-sm text-muted-foreground">{t("listSub")}</p>
         </div>
@@ -113,6 +122,7 @@ export function TopListPage() {
               });
             }}
             size="sm"
+            variant="outline"
           >
             <ToggleGroupItem value="pages">{t("pages")}</ToggleGroupItem>
             <ToggleGroupItem value="refs">{t("sources")}</ToggleGroupItem>
@@ -132,12 +142,14 @@ export function TopListPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {[...(data?.available_days || [])].reverse().map((d) => (
-                <SelectItem key={d} value={d}>
-                  {dayLabel(d)}
-                  {data?.is_today && d === data.day ? t("todayOption") : ""}
-                </SelectItem>
-              ))}
+              <SelectGroup>
+                {[...(data?.available_days || [])].reverse().map((d) => (
+                  <SelectItem key={d} value={d}>
+                    {dayLabel(d)}
+                    {data?.is_today && d === data.day ? t("todayOption") : ""}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             </SelectContent>
           </Select>
         </div>
@@ -161,58 +173,84 @@ export function TopListPage() {
               : "—"}
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Input
-            type="search"
-            placeholder={t("searchPlaceholder")}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            autoComplete="off"
-            className="max-w-sm"
-          />
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">{t("colRank")}</TableHead>
-                <TableHead>{kind === "pages" ? t("colPage") : t("colSource")}</TableHead>
-                <TableHead className="w-28 text-end">{t("colViews")}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((r, i) => {
-                const raw = String(r[data!.name_key] || "");
-                const label = labelRow(kind, raw, t);
-                const total = data?.total_views || 1;
-                return (
-                  <TableRow key={`${raw}-${i}`}>
-                    <TableCell className="text-xs text-muted-foreground tabular-nums">
-                      {String(i + 1).padStart(2, "0")}
-                    </TableCell>
-                    <TableCell
-                      className={isHost(kind, raw) ? "max-w-0 truncate font-mono text-xs [direction:ltr]" : "max-w-0 truncate"}
-                      title={label}
-                    >
-                      {label}
-                    </TableCell>
-                    <TableCell className="text-end">
-                      <div className="inline-flex items-center justify-end gap-2">
-                        <span className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-muted sm:inline-block">
-                          <span
-                            className="block h-full rounded-full bg-foreground/80"
-                            style={{ width: `${Math.max(2, (r.views / total) * 100)}%` }}
-                          />
-                        </span>
-                        <span className="font-medium tabular-nums">{fmt(r.views)}</span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-          {!filtered.length ? (
-            <div className="py-10 text-center text-sm text-muted-foreground">{t("noMatches")}</div>
-          ) : null}
+        <CardContent className="flex flex-col gap-3">
+          <FieldGroup className="max-w-sm">
+            <Field>
+              <FieldLabel htmlFor="list-search" className="sr-only">
+                {t("searchPlaceholder")}
+              </FieldLabel>
+              <Input
+                id="list-search"
+                type="search"
+                placeholder={t("searchPlaceholder")}
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                autoComplete="off"
+              />
+            </Field>
+          </FieldGroup>
+
+          {!data ? (
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : filtered.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-10">{t("colRank")}</TableHead>
+                  <TableHead>{kind === "pages" ? t("colPage") : t("colSource")}</TableHead>
+                  <TableHead className="w-28 text-end">{t("colViews")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((r, i) => {
+                  const raw = String(r[data.name_key] || "");
+                  const label = labelRow(kind, raw, t);
+                  const total = data.total_views || 1;
+                  return (
+                    <TableRow key={`${raw}-${i}`}>
+                      <TableCell className="text-xs text-muted-foreground tabular-nums">
+                        {String(i + 1).padStart(2, "0")}
+                      </TableCell>
+                      <TableCell
+                        className={
+                          isHost(kind, raw)
+                            ? "max-w-0 truncate font-mono text-xs [direction:ltr]"
+                            : "max-w-0 truncate"
+                        }
+                        title={label}
+                      >
+                        {label}
+                      </TableCell>
+                      <TableCell className="text-end">
+                        <div className="inline-flex items-center justify-end gap-2">
+                          <span className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-muted sm:inline-block">
+                            <span
+                              className="block h-full rounded-full bg-foreground/80"
+                              style={{ width: `${Math.max(2, (r.views / total) * 100)}%` }}
+                            />
+                          </span>
+                          <span className="font-medium tabular-nums">{fmt(r.views)}</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          ) : (
+            <Empty className="border-0 py-10">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <SearchX />
+                </EmptyMedia>
+                <EmptyTitle className="text-sm font-medium">{t("noMatches")}</EmptyTitle>
+              </EmptyHeader>
+            </Empty>
+          )}
         </CardContent>
       </Card>
     </div>
