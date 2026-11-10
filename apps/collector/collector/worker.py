@@ -30,7 +30,7 @@ def ensure_salt(session: Session) -> str:
     return salt
 
 
-def docker_log_files(container: str) -> List[str]:
+def docker_log_files(container: str, *, include_rotated: bool = False) -> List[str]:
     docker = shutil.which("docker") or "/usr/bin/docker"
     path = subprocess.check_output(
         [docker, "inspect", "-f", "{{.LogPath}}", container],
@@ -38,18 +38,31 @@ def docker_log_files(container: str) -> List[str]:
     ).decode("utf-8", "replace").strip()
     if not path:
         return []
-    return [path + ".2", path + ".1", path]
+    # Incremental runs only follow the live file. Rotated siblings are for
+    # purge-backfill; reading them every cron tick races with rotation renames.
+    if include_rotated:
+        return [path + ".2", path + ".1", path]
+    return [path]
 
 
 def _offset_for(path: str, inode: int, offsets: dict) -> int:
-    """Resolve byte offset, accepting both full and legacy inode-only keys."""
-    key = "%s:%s" % (path, inode)
-    if key in offsets:
-        return int(offsets.get(key) or 0)
-    # legacy hamerz-stats stored inode-only keys
-    legacy = str(inode)
-    if legacy in offsets:
-        return int(offsets.get(legacy) or 0)
+    """Resolve byte offset.
+
+    Prefer inode-only keys so Docker/logrotate renames (same inode, new path)
+    do not reset the cursor and double-ingest the rotated file.
+    """
+    inode_key = str(inode)
+    if inode_key in offsets:
+        return int(offsets.get(inode_key) or 0)
+    # legacy path:inode keys from earlier Visitly builds
+    path_key = "%s:%s" % (path, inode)
+    if path_key in offsets:
+        return int(offsets.get(path_key) or 0)
+    # older path:inode entries after rename — match by inode suffix
+    suffix = ":%s" % inode
+    for key, value in offsets.items():
+        if key.endswith(suffix) or key == inode_key:
+            return int(value or 0)
     return 0
 
 
@@ -58,7 +71,8 @@ def _read_new_bytes(path: str, offsets: dict) -> Tuple[bytes, str, int]:
     if not os.path.exists(path):
         return b"", "", 0
     st = os.stat(path)
-    key = "%s:%s" % (path, st.st_ino)
+    # inode-only key survives rotation/rename of the same file
+    key = str(st.st_ino)
     off = _offset_for(path, st.st_ino, offsets)
     if off > st.st_size:
         off = 0
@@ -102,9 +116,18 @@ def _ingest_lines(session: Session, salt: str, lines: Iterable[bytes], *, docker
     return imported, skipped
 
 
-def collect_docker(session: Session, settings: CollectorSettings, offsets: dict, salt: str) -> Tuple[int, int]:
+def collect_docker(
+    session: Session,
+    settings: CollectorSettings,
+    offsets: dict,
+    salt: str,
+    *,
+    include_rotated: bool = False,
+) -> Tuple[int, int]:
     try:
-        files = docker_log_files(settings.docker_container)
+        files = docker_log_files(
+            settings.docker_container, include_rotated=include_rotated
+        )
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         print("collector: docker inspect failed: %s" % exc)
         return 0, 0
@@ -121,10 +144,16 @@ def collect_docker(session: Session, settings: CollectorSettings, offsets: dict,
     return imported, skipped
 
 
-def collect_file(session: Session, settings: CollectorSettings, offsets: dict, salt: str) -> Tuple[int, int]:
+def collect_file(
+    session: Session,
+    settings: CollectorSettings,
+    offsets: dict,
+    salt: str,
+    *,
+    include_rotated: bool = False,
+) -> Tuple[int, int]:
     path = settings.log_path
-    # also try rotated siblings next to the active file
-    candidates = [path + ".2", path + ".1", path]
+    candidates = [path + ".2", path + ".1", path] if include_rotated else [path]
     imported = 0
     skipped = 0
     for p in candidates:
@@ -138,16 +167,43 @@ def collect_file(session: Session, settings: CollectorSettings, offsets: dict, s
     return imported, skipped
 
 
-def collect(session: Session, settings: CollectorSettings) -> int:
-    offsets = json.loads(meta_get(session, "offsets") or "{}")
+def _normalize_offsets(offsets: dict) -> dict:
+    """Keep inode-only keys; drop legacy path:inode duplicates."""
+    normalized: dict = {}
+    for key, value in offsets.items():
+        key_s = str(key)
+        if key_s.isdigit():
+            inode = key_s
+        elif ":" in key_s:
+            inode = key_s.rsplit(":", 1)[-1]
+        else:
+            continue
+        if not inode.isdigit():
+            continue
+        cur = int(normalized.get(inode) or 0)
+        normalized[inode] = max(cur, int(value or 0))
+    return normalized
+
+
+def collect(
+    session: Session,
+    settings: CollectorSettings,
+    *,
+    include_rotated: bool = False,
+) -> int:
+    offsets = _normalize_offsets(json.loads(meta_get(session, "offsets") or "{}"))
     salt = ensure_salt(session)
     source = (settings.log_source or "file").strip().lower()
     if source == "docker":
-        imported, skipped = collect_docker(session, settings, offsets, salt)
+        imported, skipped = collect_docker(
+            session, settings, offsets, salt, include_rotated=include_rotated
+        )
     else:
-        imported, skipped = collect_file(session, settings, offsets, salt)
+        imported, skipped = collect_file(
+            session, settings, offsets, salt, include_rotated=include_rotated
+        )
 
-    meta_set(session, "offsets", json.dumps(offsets, sort_keys=True))
+    meta_set(session, "offsets", json.dumps(_normalize_offsets(offsets), sort_keys=True))
     meta_set(session, "last_run", str(int(time.time())))
     session.commit()
     if skipped:
@@ -179,7 +235,8 @@ def purge_backfill(session: Session, settings: CollectorSettings) -> int:
             before["backfill_until"],
         )
     )
-    imported = collect(session, settings)
+    # Rebuild from live + rotated docker/file logs once.
+    imported = collect(session, settings, include_rotated=True)
     data = build_payload(session)
     left = session.execute(
         text(

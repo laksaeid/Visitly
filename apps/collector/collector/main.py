@@ -4,15 +4,22 @@ import argparse
 import os
 import sys
 
+from sqlalchemy import text
+
 from collector.config import get_settings
 from collector.worker import collect, purge_backfill
 from visitly_core.db import make_engine, make_session_factory
 from visitly_core.selftest import run_selftest
 
+# Stable lock id for pg_try_advisory_lock (Visitly collector).
+_PG_LOCK_KEY = 872014401
+
 
 def _try_lock(path: str):
-    """Cross-platform non-blocking lock. Returns file handle or None."""
-    os.makedirs(os.path.dirname(os.path.abspath(path)) or ".", exist_ok=True)
+    """Cross-platform non-blocking file lock. Returns file handle or None."""
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     lock = open(path, "a+")
     try:
         if os.name == "nt":
@@ -49,23 +56,39 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     settings = get_settings()
-    lock = _try_lock(settings.lock_path)
-    if lock is None:
-        print("another collector run is active; skipping")
-        return 0
+    # File lock alone is unreliable with `docker compose run --rm` (ephemeral FS).
+    file_lock = _try_lock(settings.lock_path)
 
     engine = make_engine(settings.database_url)
     SessionLocal = make_session_factory(engine)
     session = SessionLocal()
+    got_pg_lock = False
     try:
+        got_pg_lock = bool(
+            session.execute(
+                text("SELECT pg_try_advisory_lock(:k)"), {"k": _PG_LOCK_KEY}
+            ).scalar()
+        )
+        if not got_pg_lock:
+            print("another collector run is active; skipping")
+            return 0
         if args.purge_backfill:
             imported = purge_backfill(session, settings)
         else:
             imported = collect(session, settings)
             print("collector: imported %d requests" % imported)
     finally:
+        if got_pg_lock:
+            try:
+                session.execute(
+                    text("SELECT pg_advisory_unlock(:k)"), {"k": _PG_LOCK_KEY}
+                )
+                session.commit()
+            except Exception:
+                session.rollback()
         session.close()
-        lock.close()
+        if file_lock is not None:
+            file_lock.close()
     return 0
 
 

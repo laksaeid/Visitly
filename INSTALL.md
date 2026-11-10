@@ -1,107 +1,149 @@
 # Installing Visitly
 
-Visitly ships an **automated staged installer** so anyone can go from a git clone to a running dashboard without hand-copying Docker commands.
-
 ## Requirements
 
-- Linux server recommended (nginx + Docker is the usual production setup)
-- Docker Engine with Compose plugin (`docker compose`)
-- Python **3.10+** on the host *or* Docker (old hosts like CentOS 7 / Python 3.6 are fine — `./install.sh` bootstraps Python 3.12 in Docker)
-- Outbound network to pull images / build deps
+- Linux host with Docker Engine + Compose plugin (`docker compose`)
+- An nginx edge that already serves your site (host nginx **or** a Docker nginx container)
+- Free localhost ports **3099** (API/UI) and **5433** (Postgres)
+- Outbound network to pull/build images
 
-At start, `./install.sh` asks you to select mirrors:
-
-1. **global** — Docker Hub + PyPI + npmjs  
-2. **iran** — Arvan + Tsinghua + npmmirror  
-
-No env exports are required for that choice.
-
-## One-command install
+## 1. Clone and configure
 
 ```bash
 git clone https://github.com/laksaeid/Visitly.git
 cd Visitly
-chmod +x install.sh
-./install.sh
+cp .env.example .env
+mkdir -p /var/lib/visitly
 ```
 
-Windows (PowerShell), from the repo root:
+Edit `.env`. Minimum you must set:
 
-```powershell
-python install.py
-```
+| Variable | Example |
+|----------|---------|
+| `POSTGRES_PASSWORD` | strong password |
+| `DATABASE_URL` | `postgresql+psycopg://visitly:PASSWORD@localhost:5433/visitly` (host-side tools only; Compose overrides this inside containers) |
+| `VISITLY_SITE_NAME` | `Hamerz` |
+| `VISITLY_SITE_HOSTS` | `example.com,www.example.com` |
+| `VISITLY_TIMEZONE` | `Asia/Tehran` |
+| `VISITLY_ADMIN_USER` / `VISITLY_ADMIN_PASSWORD` | dashboard login |
+| `VISITLY_SESSION_SECRET` | long random string |
+| `VISITLY_LOG_SOURCE` | `docker` or `file` |
+| `VISITLY_DOCKER_CONTAINER` | nginx container name when `docker` (e.g. `hamerz-nginx-edge`) |
+| `VISITLY_LOG_PATH` / `VISITLY_HOST_LOG_DIR` | when `file` |
+| `VISITLY_LOCK_PATH` | `/var/lib/visitly/collect.lock` |
 
-The installer pauses between stages so you can review each step. Use `--yes` to auto-accept continue prompts.
+**Iran mirrors** (optional) — uncomment the Iran block in `.env.example` (`VISITLY_MIRROR_PROFILE=iran`, Arvan images, Tsinghua PyPI, npmmirror).
 
-## What each stage does
+**Log format:** Visitly expects edge TSV lines with `$host` (see `deploy/nginx.visitly.conf.snippet`). Combined logs also work but cannot filter by Host as cleanly.
 
-| # | Stage | Action |
-|---|-------|--------|
-| 1 | Preflight | Checks Docker, Compose, ports `3099` / `5433` |
-| 2 | Configure | Writes `.env` (site, admin, log source, mirror profile) |
-| 3 | Postgres | Starts `visitly-pg` on `127.0.0.1:5433` |
-| 4 | API | Builds SPA + API image, starts `visitly-api` on `127.0.0.1:3099` |
-| 5 | Migrate | Runs `alembic upgrade head` |
-| 6 | Collector | Builds collector, first run, optional `/etc/cron.d` job |
-| 7 | Nginx | Prints `/stats/` proxy snippet; optional safe patch + backup |
-| 8 | Verify | Hits `/healthz`, `/stats/`, `/stats/api/config` |
-
-## Fully automated (CI / scripted)
-
-Set config via environment (or a prepared `.env`), then:
+## 2. Start Postgres + API
 
 ```bash
-export VISITLY_SITE_NAME='My Site'
-export VISITLY_SITE_HOSTS='example.com,www.example.com'
-export VISITLY_TIMEZONE='UTC'
-export VISITLY_ADMIN_USER='admin'
-export VISITLY_ADMIN_PASSWORD='choose-a-strong-password'
-export VISITLY_LOG_SOURCE='file'   # or docker
-export VISITLY_LOG_PATH='/var/log/nginx/access.log'
-# optional Iran-friendly builds:
-# export VISITLY_MIRROR_PROFILE=iran
-
-./install.sh --non-interactive --skip-nginx
+docker compose -p visitly up -d postgres
+docker compose -p visitly build api
+docker compose -p visitly up -d api
+docker exec visitly-api alembic upgrade head
 ```
 
-Patch nginx in the same run:
+Check:
 
 ```bash
-./install.sh --non-interactive --nginx-config /etc/nginx/sites-enabled/example.com
+curl -sS http://127.0.0.1:3099/healthz
+curl -sS http://127.0.0.1:3099/stats/api/config
 ```
 
-## Resume / repair
+UI locally: `http://127.0.0.1:3099/stats/`
+
+## 3. Collector (first import + cron)
+
+Build and run a one-shot import:
 
 ```bash
-./install.sh --from api          # continue from API build
-./install.sh --only verify       # health check only
-./install.sh --only collector    # rebuild collector + cron prompt
-```
-
-## After install
-
-- Local UI: `http://127.0.0.1:3099/stats/`
-- Public UI: `https://YOUR_DOMAIN/stats/` (after nginx proxy)
-- Login: values from `.env` (`VISITLY_ADMIN_USER` / `VISITLY_ADMIN_PASSWORD`)
-
-Logs:
-
-```bash
-docker logs -f visitly-api
+docker compose -p visitly --profile collector build collector
 docker compose -p visitly --profile collector run --rm --no-deps collector
 ```
 
-## Mirror profiles
+Schedule every 2 minutes (do **not** overlap long backfills without the lock — Compose uses a Postgres advisory lock plus `/var/lib/visitly/collect.lock`):
 
-| Profile | When to use |
-|---------|-------------|
-| `global` (default) | Docker Hub + PyPI + npmjs |
-| `iran` | Arvan Docker mirror + Tsinghua PyPI + npmmirror |
+```bash
+cat >/etc/cron.d/visitly-collect <<'EOF'
+*/2 * * * * root cd /path/to/Visitly && /usr/bin/docker compose -p visitly --profile collector run --rm --no-deps collector >>/var/log/visitly-collect.log 2>&1
+EOF
+chmod 644 /etc/cron.d/visitly-collect
+```
 
-Choose interactively in stage 2, or set `VISITLY_MIRROR_PROFILE=iran`.
+If counts look doubled after a bad run, pause cron, rebuild from logs, then re-enable:
+
+```bash
+mv /etc/cron.d/visitly-collect /etc/cron.d/visitly-collect.disabled
+docker compose -p visitly --profile collector run --rm --no-deps collector \
+  python -m collector.main --purge-backfill
+mv /etc/cron.d/visitly-collect.disabled /etc/cron.d/visitly-collect
+```
+
+## 4. Nginx `/stats/` proxy
+
+Copy the location block from `deploy/nginx.visitly.conf.snippet` into the **site** `server { }` that serves your public hostname (not an unrelated vhost).
+
+```nginx
+location = /stats { return 301 /stats/; }
+location ^~ /stats/ {
+    proxy_pass http://127.0.0.1:3099/stats/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    add_header Cache-Control "no-store" always;
+}
+```
+
+Backup the conf, test, reload:
+
+```bash
+cp /path/to/site.conf /path/to/site.conf.visitly-bak-$(date +%Y%m%d%H%M%S)
+nginx -t && nginx -s reload
+# or, for Docker edge nginx:
+# docker exec <nginx-container> nginx -t && docker exec <nginx-container> nginx -s reload
+```
+
+Public UI: `https://YOUR_DOMAIN/stats/`
+
+## 5. Verify
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3099/stats/
+curl -sS http://127.0.0.1:3099/healthz
+tail -f /var/log/visitly-collect.log
+docker logs -f visitly-api
+```
+
+Login with `VISITLY_ADMIN_USER` / `VISITLY_ADMIN_PASSWORD`.
+
+## How metrics work (so numbers look “right”)
+
+- **Source:** nginx access logs only (no JS beacon). Client-side SPA navigations that never hit nginx are invisible.
+- **Pageviews:** `GET`/`HEAD` `200`/`304` HTML-like paths; assets, `/_next/`, `/api/`, `/stats`, etc. are skipped.
+- **Bots:** User-Agent patterns → `bot_pageviews`. Default UI filter is humans only.
+- **Cap:** each IP contributes at most `VISITLY_HUMAN_DAY_CAP` (default 120) pageviews/day; IPs above `5 × cap` are treated as crawlers and excluded from the human KPI.
+- **Uniques:** distinct privacy-hashed IPs with at least one eligible pageview.
+
+If the dashboard looks inflated, check `/var/log/visitly-collect.log` for a second huge `imported NNNNN requests` line — that means a full re-ingest raced the previous run. Use `--purge-backfill` after fixing locks/cron as above.
+
+## Upgrades
+
+```bash
+cd /path/to/Visitly
+git pull
+docker compose -p visitly build api collector
+docker compose -p visitly up -d api
+docker exec visitly-api alembic upgrade head
+# collector picks up on next cron tick; or run once:
+docker compose -p visitly --profile collector run --rm --no-deps collector
+```
 
 ## Safety notes
 
-- Postgres and API bind to **localhost only** (`5433`, `3099`) so they do not collide with an existing public Postgres on `5432`.
-- Nginx patching always writes a timestamped `*.visitly-bak-*` backup and runs `nginx -t` before reload.
-- The installer never restarts the Docker daemon and never touches unrelated Compose projects.
+- Postgres (`5433`) and API (`3099`) bind to **127.0.0.1** only.
+- Do not restart the Docker daemon or unrelated Compose stacks while installing.
+- Always backup nginx conf before editing; run `nginx -t` before reload.

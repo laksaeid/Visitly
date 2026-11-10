@@ -14,35 +14,30 @@ Visitly tails nginx logs (file or Docker stdout), stores privacy-hashed aggregat
 - Cookie session login (single admin)
 - Nginx **file** or **Docker** log source
 
-## Install (automated)
+## Install
 
-Anyone can install from this repo with the staged CLI:
+Full steps: **[INSTALL.md](INSTALL.md)**.
 
 ```bash
 git clone https://github.com/laksaeid/Visitly.git
 cd Visitly
-chmod +x install.sh
-./install.sh
+cp .env.example .env
+# edit .env — site hosts, admin, timezone, log source (file|docker)
+mkdir -p /var/lib/visitly
+
+docker compose -p visitly up -d postgres
+docker compose -p visitly build api
+docker compose -p visitly up -d api
+docker exec visitly-api alembic upgrade head
+
+docker compose -p visitly --profile collector build collector
+docker compose -p visitly --profile collector run --rm --no-deps collector
+# then add /etc/cron.d/visitly-collect (see INSTALL.md)
 ```
 
-Needs Docker + Compose. Host Python 3.10+ is optional — on older OS Python (e.g. 3.6) the script bootstraps itself in a `python:3.12` container. At start you **select** global or iran mirrors (no env exports needed).
+Proxy `/stats/` to `127.0.0.1:3099` using `deploy/nginx.visitly.conf.snippet`.
 
-Windows:
-
-```powershell
-python install.py
-```
-
-The installer runs **8 stages** (preflight → `.env` → Postgres → API build → migrations → collector → nginx → verify), confirming each step. Full details: **[INSTALL.md](INSTALL.md)**.
-
-```bash
-./install.sh --yes
-./install.sh --non-interactive --skip-nginx   # env/.env driven automation
-./install.sh --from api                       # resume
-./install.sh --only verify
-```
-
-After install: `http://127.0.0.1:3099/stats/` (and `https://your-domain/stats/` once nginx proxies).
+Local UI: `http://127.0.0.1:3099/stats/` · Public: `https://your-domain/stats/`
 
 ## Local development
 
@@ -64,7 +59,6 @@ Login uses `VISITLY_ADMIN_USER` / `VISITLY_ADMIN_PASSWORD`.
 apps/web          React + Vite dashboard
 apps/api          FastAPI auth + stats APIs
 apps/collector    nginx log worker → Postgres
-apps/installer    interactive `python install.py` CLI
 packages/visitly_core   parsing, bots, timezone days, queries
 deploy/           nginx snippets
 ```
@@ -81,6 +75,8 @@ deploy/           nginx snippets
 | `VISITLY_LOG_PATH` | Access log path when `file` |
 | `VISITLY_HOST_LOG_DIR` | Host dir mounted into collector for `file` logs |
 | `VISITLY_DOCKER_CONTAINER` | Container name when `docker` |
+| `VISITLY_LOCK_PATH` | Collector lock file (use `/var/lib/visitly/collect.lock` in prod) |
+| `VISITLY_HUMAN_DAY_CAP` | Soft per-IP pageview cap (default `120`) |
 | `DATABASE_URL` | Postgres SQLAlchemy URL |
 
 ## API

@@ -73,12 +73,15 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-visitly}:${POSTGRES_PASSWORD:-visitly_dev_change_me}@postgres:5432/${POSTGRES_DB:-visitly}
       VISITLY_LOG_SOURCE: ${VISITLY_LOG_SOURCE:-docker}
       VISITLY_DOCKER_CONTAINER: ${VISITLY_DOCKER_CONTAINER:-nginx}
+      VISITLY_LOCK_PATH: ${VISITLY_LOCK_PATH:-/var/lib/visitly/collect.lock}
     volumes:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /usr/bin/docker:/usr/bin/docker:ro
       # Host nginx log dir for VISITLY_LOG_SOURCE=file (override via .env)
       - ${VISITLY_HOST_LOG_DIR:-/var/log/nginx}:/var/log/nginx:ro
+      # Persist flock across ephemeral `compose run --rm` containers
+      - ${VISITLY_LOCK_DIR:-/var/lib/visitly}:/var/lib/visitly
     depends_on:
       postgres:
         condition: service_healthy
