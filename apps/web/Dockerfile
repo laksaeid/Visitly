@@ -1,7 +1,8 @@
-FROM node:22-alpine AS build
+ARG NODE_IMAGE=node:22-alpine
+FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 
-ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG NPM_REGISTRY=https://registry.npmjs.org
 
 COPY apps/web/package.json apps/web/package-lock.json* ./
 RUN npm config set registry "$NPM_REGISTRY" \

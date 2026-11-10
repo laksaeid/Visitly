@@ -14,73 +14,33 @@ Visitly tails nginx logs (file or Docker stdout), stores privacy-hashed aggregat
 - Cookie session login (single admin)
 - Nginx **file** or **Docker** log source
 
-## Quick start
+## Install (automated)
 
-### 1. Configure
-
-```bash
-cp .env.example .env
-```
-
-Set at least:
-
-```env
-VISITLY_SITE_NAME=My Site
-VISITLY_SITE_HOSTS=example.com,www.example.com
-VISITLY_TIMEZONE=UTC
-VISITLY_ADMIN_USER=admin
-VISITLY_ADMIN_PASSWORD=choose-a-strong-password
-VISITLY_SESSION_SECRET=long-random-string
-VISITLY_LOG_SOURCE=file
-VISITLY_LOG_PATH=/var/log/nginx/access.log
-DATABASE_URL=postgresql+psycopg://visitly:visitly_dev_change_me@localhost:5432/visitly
-```
-
-### 2. Run with Docker Compose
-
-Docker builds default to the **Arvan Iran mirrors** for PyPI/npm (override with `PIP_INDEX_URL` / `NPM_REGISTRY` in `.env`).
+Anyone can install from this repo with the staged CLI:
 
 ```bash
-# optional: confirm mirror works
-curl -I https://mirror.arvancloud.ir/pypi/simple/pip/
-
-docker compose up -d --build postgres api web
-# optional collector (mount host logs via VISITLY_HOST_LOG_DIR)
-docker compose --profile collector up -d collector
+git clone https://github.com/laksaeid/Visitly.git
+cd Visitly
+chmod +x install.sh
+./install.sh
 ```
 
-- API: `http://127.0.0.1:3099`
-- Web (nginx front): `http://127.0.0.1:8080/stats/`
+Windows:
 
-Apply migrations once:
+```powershell
+python install.py
+```
+
+The installer runs **8 stages** (preflight → `.env` → Postgres → API build → migrations → collector → nginx → verify), confirming each step. Full details: **[INSTALL.md](INSTALL.md)**.
 
 ```bash
-docker compose exec api alembic upgrade head
+./install.sh --yes
+./install.sh --non-interactive --skip-nginx   # env/.env driven automation
+./install.sh --from api                       # resume
+./install.sh --only verify
 ```
 
-### 3. Nginx
-
-See [`deploy/nginx.visitly.conf.snippet`](deploy/nginx.visitly.conf.snippet) for:
-
-- Recommended `log_format visitly` (TSV including `$host`)
-- `/stats/` reverse proxy to the API
-
-Classic `combined` logs also work when `VISITLY_SITE_HOSTS` is set (host filter uses configured hosts; empty `$host` in combined lines is accepted for single-site installs).
-
-### 4. Collector (cron / systemd)
-
-Every 1–2 minutes:
-
-```bash
-python -m collector.main
-# or: visitly-collect
-```
-
-Self-test:
-
-```bash
-python -m collector.main --selftest
-```
+After install: `http://127.0.0.1:3099/stats/` (and `https://your-domain/stats/` once nginx proxies).
 
 ## Local development
 
@@ -99,9 +59,10 @@ Login uses `VISITLY_ADMIN_USER` / `VISITLY_ADMIN_PASSWORD`.
 ## Layout
 
 ```text
-apps/web          React + Vite dashboard (English, LTR)
+apps/web          React + Vite dashboard
 apps/api          FastAPI auth + stats APIs
 apps/collector    nginx log worker → Postgres
+apps/installer    interactive `python install.py` CLI
 packages/visitly_core   parsing, bots, timezone days, queries
 deploy/           nginx snippets
 ```
@@ -116,6 +77,7 @@ deploy/           nginx snippets
 | `VISITLY_BASE_PATH` | URL mount (default `/stats`) |
 | `VISITLY_LOG_SOURCE` | `file` or `docker` |
 | `VISITLY_LOG_PATH` | Access log path when `file` |
+| `VISITLY_HOST_LOG_DIR` | Host dir mounted into collector for `file` logs |
 | `VISITLY_DOCKER_CONTAINER` | Container name when `docker` |
 | `DATABASE_URL` | Postgres SQLAlchemy URL |
 

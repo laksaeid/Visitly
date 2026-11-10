@@ -1,13 +1,12 @@
 services:
   postgres:
-    # Use Arvan Docker Hub mirror (same as other services on this host)
-    image: docker.arvancloud.ir/library/postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     container_name: visitly-pg
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-visitly}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-visitly_dev_change_me}
       POSTGRES_DB: ${POSTGRES_DB:-visitly}
-    # Bind only to localhost on a free port — do NOT use 5432 (production uses it)
+    # Bind only to localhost on a free port — do NOT use 5432 (production often uses it)
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
@@ -25,8 +24,11 @@ services:
       dockerfile: apps/api/Dockerfile
       network: host
       args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
-        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     container_name: visitly-api
     env_file: .env
     environment:
@@ -46,7 +48,8 @@ services:
       dockerfile: apps/web/Dockerfile
       network: host
       args:
-        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-alpine}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
     container_name: visitly-web
     ports:
       - "127.0.0.1:8088:80"
@@ -61,18 +64,21 @@ services:
       dockerfile: apps/collector/Dockerfile
       network: host
       args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
-        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.12-slim}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.org}
     container_name: visitly-collector
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-visitly}:${POSTGRES_PASSWORD:-visitly_dev_change_me}@postgres:5432/${POSTGRES_DB:-visitly}
       VISITLY_LOG_SOURCE: ${VISITLY_LOG_SOURCE:-docker}
-      VISITLY_DOCKER_CONTAINER: ${VISITLY_DOCKER_CONTAINER:-hamerz-nginx-edge}
+      VISITLY_DOCKER_CONTAINER: ${VISITLY_DOCKER_CONTAINER:-nginx}
     volumes:
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /usr/bin/docker:/usr/bin/docker:ro
+      # Host nginx log dir for VISITLY_LOG_SOURCE=file (override via .env)
+      - ${VISITLY_HOST_LOG_DIR:-/var/log/nginx}:/var/log/nginx:ro
     depends_on:
       postgres:
         condition: service_healthy

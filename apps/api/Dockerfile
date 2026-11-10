@@ -1,19 +1,21 @@
-# Frontend build (npmmirror for IR)
-FROM docker.arvancloud.ir/library/node:22-alpine AS webbuild
+# Frontend build
+ARG NODE_IMAGE=node:22-alpine
+FROM ${NODE_IMAGE} AS webbuild
 WORKDIR /web
-ARG NPM_REGISTRY=https://registry.npmmirror.com
+ARG NPM_REGISTRY=https://registry.npmjs.org
 COPY apps/web/package.json apps/web/package-lock.json* ./
 RUN npm config set registry "$NPM_REGISTRY" && npm install
 COPY apps/web/ ./
 RUN npm run build
 
 # API + static UI
-FROM docker.arvancloud.ir/library/python:3.12-slim
+ARG PYTHON_IMAGE=python:3.12-slim
+FROM ${PYTHON_IMAGE}
 
 WORKDIR /app
 
-ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-ARG PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_TRUSTED_HOST=pypi.org
 
 ENV PIP_DEFAULT_TIMEOUT=120 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
