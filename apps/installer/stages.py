@@ -353,6 +353,143 @@ def os_name_is_windows() -> bool:
     return os.name == "nt"
 
 
+def _add_nginx_candidate(path: Path, found: list[Path], seen: set[str]) -> None:
+    if not path.is_file():
+        return
+    if path.suffix not in {".conf", ""} and "sites-" not in str(path.parent):
+        return
+    name = path.name
+    if name.endswith(".bak") or ".visitly-bak-" in name or ".bak-" in name:
+        return
+    if name in {"nginx.conf", "mime.types", "fastcgi.conf", "proxy_params", "proxy.conf"}:
+        return
+    try:
+        key = str(path.resolve())
+    except Exception:
+        key = str(path)
+    if key in seen:
+        return
+    seen.add(key)
+    found.append(path)
+
+
+def discover_nginx_configs() -> list[Path]:
+    """Find likely nginx site configs the user can pick from."""
+    patterns = [
+        "/etc/nginx/sites-enabled/*",
+        "/etc/nginx/sites-available/*",
+        "/etc/nginx/conf.d/*.conf",
+        "/usr/local/nginx/conf/conf.d/*.conf",
+        "/root/hamerz-nginx-cutover/public-candidate/*.conf",
+        "/root/*/public-candidate/*.conf",
+        "/root/*nginx*/conf.d/*.conf",
+        "/opt/nginx/conf/conf.d/*.conf",
+    ]
+    found: list[Path] = []
+    seen: set[str] = set()
+
+    for pattern in patterns:
+        glob_pat = pattern[1:] if pattern.startswith("/") else pattern
+        for path in Path("/").glob(glob_pat):
+            _add_nginx_candidate(path, found, seen)
+
+    # Scan mounts from running nginx containers (e.g. hamerz-nginx-edge)
+    try:
+        import subprocess
+
+        ps = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        for name in (ps.stdout or "").splitlines():
+            name = name.strip()
+            if not name or "nginx" not in name.lower():
+                continue
+            inspect = subprocess.run(
+                [
+                    "docker",
+                    "inspect",
+                    "--format",
+                    "{{range .Mounts}}{{.Source}}|{{.Destination}}\n{{end}}",
+                    name,
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            for line in (inspect.stdout or "").splitlines():
+                if "|" not in line:
+                    continue
+                source, dest = line.split("|", 1)
+                dest_l = dest.lower()
+                if not any(token in dest_l for token in ("nginx", "conf.d", "sites-", "conf")):
+                    continue
+                src = Path(source)
+                if src.is_dir():
+                    for path in sorted(src.glob("*.conf")):
+                        _add_nginx_candidate(path, found, seen)
+                elif src.is_file():
+                    _add_nginx_candidate(src, found, seen)
+    except Exception:
+        pass
+
+    def rank(p: Path) -> tuple[int, str]:
+        name = p.name.lower()
+        score = 0
+        try:
+            sample = p.read_text(encoding="utf-8", errors="ignore")[:4000]
+            if "server_name" in sample:
+                score -= 10
+            if "listen" in sample:
+                score -= 5
+            if "ssl" in sample:
+                score -= 2
+        except Exception:
+            score += 20
+        if any(token in name for token in ("shop", "site", "www", "hamerz")):
+            score -= 3
+        if name.startswith("00-"):
+            score += 5
+        return (score, str(p))
+
+    return sorted(found, key=rank)
+
+
+def pick_nginx_config() -> Path | None:
+    configs = discover_nginx_configs()
+    say("  Detected nginx site configs:")
+    if not configs:
+        say("    (none found in common paths)")
+    else:
+        for i, path in enumerate(configs, start=1):
+            say(f"    {i}) {path}")
+    say(f"    {len(configs) + 1}) Enter a custom path")
+    say("    0) Cancel / skip patching")
+
+    default = "1" if configs else str(len(configs) + 1)
+    choice = prompt("Select nginx config", default)
+    if choice.strip() in {"0", "cancel", "n", "no"}:
+        return None
+
+    if choice.strip().isdigit():
+        idx = int(choice.strip())
+        if idx == 0:
+            return None
+        if 1 <= idx <= len(configs):
+            return configs[idx - 1]
+        if idx == len(configs) + 1:
+            custom = prompt("Custom nginx config path", "")
+            return Path(custom)
+
+    # Allow typing a path directly
+    typed = Path(choice)
+    if typed.is_file():
+        return typed
+    raise InstallError(f"Invalid selection: {choice}")
+
+
 def stage_nginx(ctx: InstallContext) -> None:
     header("Nginx reverse proxy for /stats/", 7, TOTAL_STAGES)
     if ctx.skip_nginx:
@@ -371,15 +508,19 @@ def stage_nginx(ctx: InstallContext) -> None:
             say("  Non-interactive mode: not patching nginx (pass --nginx-config PATH).")
             say("  Paste the snippet into your server block, then reload nginx.")
             return
-        if not confirm("Patch an nginx site config automatically (with backup)?", default=False, yes=False):
+        if not confirm("Patch an nginx site config automatically (with backup)?", default=True, yes=False):
             say("  Paste the snippet into your server block, then reload nginx.")
             return
-        conf = prompt("Path to nginx site config", "")
-        path = Path(conf)
+        selected = pick_nginx_config()
+        if selected is None:
+            say("  Skipping nginx patch.")
+            return
+        path = selected
     else:
         path = ctx.nginx_config
     if not path.is_file():
         raise InstallError(f"Nginx config not found: {path}")
+    say(f"  Using: {path}")
 
     text = path.read_text(encoding="utf-8")
     marker = "127.0.0.1:3099/stats/"
@@ -399,12 +540,7 @@ def stage_nginx(ctx: InstallContext) -> None:
         add_header Cache-Control "no-store" always;
     }
 """
-    # Insert before the last closing brace of the server block when possible.
-    match = list(re.finditer(r"^}", text, flags=re.MULTILINE))
-    if not match:
-        raise InstallError("Could not find a closing `}` to insert the location block.")
-    insert_at = match[-1].start()
-    updated = text[:insert_at] + block + "\n" + text[insert_at:]
+    updated = _insert_stats_location(text, block, ctx.env.get("VISITLY_SITE_HOSTS", ""))
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     backup = path.with_suffix(path.suffix + f".visitly-bak-{stamp}")
@@ -413,17 +549,119 @@ def stage_nginx(ctx: InstallContext) -> None:
     path.write_text(updated, encoding="utf-8")
     say(f"  Updated: {path}")
 
+    _reload_nginx(ctx, backup, path)
+
+
+def _insert_stats_location(text: str, block: str, site_hosts: str) -> str:
+    """Insert /stats/ proxy into the best matching server block."""
+    hosts = [h.strip().lower() for h in site_hosts.split(",") if h.strip()]
+
+    # Prefer inserting just before the main `location /` inside a matching server{}
+    server_blocks = list(re.finditer(r"server\s*\{", text))
+    if not server_blocks:
+        raise InstallError("No nginx server { ... } block found in that config.")
+
+    chosen_start = None
+    chosen_end = None
+    for match in server_blocks:
+        start = match.start()
+        # brace match from this server {
+        depth = 0
+        end = None
+        for i in range(match.end() - 1, len(text)):
+            ch = text[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        if end is None:
+            continue
+        body = text[start : end + 1]
+        body_l = body.lower()
+        if hosts and any(host in body_l for host in hosts):
+            chosen_start, chosen_end = start, end
+            break
+        if chosen_start is None and "server_name" in body_l:
+            chosen_start, chosen_end = start, end
+
+    if chosen_start is None or chosen_end is None:
+        chosen_start = server_blocks[0].start()
+        depth = 0
+        chosen_end = len(text) - 1
+        for i in range(server_blocks[0].end() - 1, len(text)):
+            if text[i] == "{":
+                depth += 1
+            elif text[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    chosen_end = i
+                    break
+
+    body = text[chosen_start : chosen_end + 1]
+    loc = re.search(r"\n[ \t]*location\s+/(\s|\{)", body)
+    if loc:
+        insert_at = chosen_start + loc.start()
+    else:
+        insert_at = chosen_end
+    return text[:insert_at] + block + "\n" + text[insert_at:]
+
+
+def _reload_nginx(ctx: InstallContext, backup: Path, conf_path: Path) -> None:
     if which("nginx"):
         test = run(ctx, ["nginx", "-t"], check=False, capture=True)
         if test.returncode != 0:
             say("  nginx -t failed — restoring backup.")
-            shutil.copy2(backup, path)
+            shutil.copy2(backup, conf_path)
             raise InstallError((test.stderr or test.stdout or "nginx -t failed").strip())
         if confirm("Reload nginx now?", default=True, yes=ctx.yes):
             run(ctx, ["nginx", "-s", "reload"], check=False)
             say("  nginx reloaded.")
+        return
+
+    # Fallback: reload nginx running in Docker (common on this host)
+    try:
+        import subprocess
+
+        ps = subprocess.run(
+            ["docker", "ps", "--format", "{{.Names}}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        names = [
+            n.strip()
+            for n in (ps.stdout or "").splitlines()
+            if n.strip() and "nginx" in n.lower()
+        ]
+    except Exception:
+        names = []
+
+    if not names:
+        say("  No host nginx binary / nginx container found — reload manually after review.")
+        return
+
+    say("  Detected nginx containers:")
+    for i, name in enumerate(names, start=1):
+        say(f"    {i}) {name}")
+    pick = prompt("Reload which container? (0=skip)", "1" if names else "0")
+    if pick.strip() in {"0", "skip", "n", "no"}:
+        say("  Skipped reload.")
+        return
+    if pick.strip().isdigit() and 1 <= int(pick.strip()) <= len(names):
+        container = names[int(pick.strip()) - 1]
     else:
-        say("  `nginx` binary not in PATH — reload it yourself after reviewing the config.")
+        container = pick.strip()
+
+    test = run(ctx, ["docker", "exec", container, "nginx", "-t"], check=False, capture=True)
+    if test.returncode != 0:
+        say("  nginx -t failed in container — restoring backup.")
+        shutil.copy2(backup, conf_path)
+        raise InstallError((test.stderr or test.stdout or "nginx -t failed").strip())
+    run(ctx, ["docker", "exec", container, "nginx", "-s", "reload"], check=False)
+    say(f"  Reloaded nginx in container: {container}")
 
 
 def stage_verify(ctx: InstallContext) -> None:
