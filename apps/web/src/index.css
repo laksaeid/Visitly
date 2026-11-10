@@ -83,9 +83,18 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* Keep page gutter when Select/Dialog lock body scroll (RTL scrollbar is on the left). */
+    scrollbar-gutter: stable;
+  }
   body {
     @apply bg-background text-foreground antialiased;
     min-height: 100vh;
+  }
+  /* react-remove-scroll always pads the right side; with scrollbar-gutter that shifts layout. */
+  body[data-scroll-locked] {
+    margin-right: 0 !important;
+    padding-right: 0 !important;
   }
   html[lang="fa"] body {
     font-family: "Vazirmatn", "DM Sans", ui-sans-serif, system-ui, sans-serif;
