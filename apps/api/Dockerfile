@@ -1,5 +1,8 @@
-# Frontend build
+# FROM args must be declared before the first FROM (BuildKit).
 ARG NODE_IMAGE=node:22-alpine
+ARG PYTHON_IMAGE=python:3.12-slim
+
+# Frontend build
 FROM ${NODE_IMAGE} AS webbuild
 WORKDIR /web
 ARG NPM_REGISTRY=https://registry.npmjs.org
@@ -9,7 +12,6 @@ COPY apps/web/ ./
 RUN npm run build
 
 # API + static UI
-ARG PYTHON_IMAGE=python:3.12-slim
 FROM ${PYTHON_IMAGE}
 
 WORKDIR /app
