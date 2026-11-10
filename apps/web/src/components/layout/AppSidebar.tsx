@@ -97,7 +97,7 @@ export function AppSidebar({ side = "left" }: Props) {
         </SidebarMenu>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="overflow-x-hidden">
         <SidebarGroup>
           <SidebarGroupLabel>{t("navSection")}</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -120,7 +120,7 @@ export function AppSidebar({ side = "left" }: Props) {
 
         <SidebarGroup className="group-data-[collapsible=icon]:hidden">
           <SidebarGroupLabel>{t("filterAria")}</SidebarGroupLabel>
-          <SidebarGroupContent className="flex flex-col gap-2 px-2">
+          <SidebarGroupContent className="flex min-w-0 flex-col gap-2 px-2">
             <BotFilter includeBots={includeBots} onChange={setIncludeBots} />
             <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
               {includeBots ? t("filterHintBots") : t("filterHintHumans")}
@@ -130,11 +130,11 @@ export function AppSidebar({ side = "left" }: Props) {
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="flex items-center gap-2 group-data-[collapsible=icon]:flex-col">
+        <div className="flex min-w-0 items-center gap-2 group-data-[collapsible=icon]:flex-col">
           <LangToggle />
-          <Button type="button" variant="outline" size="sm" className="flex-1" onClick={logout}>
+          <Button type="button" variant="outline" size="sm" className="min-w-0 flex-1" onClick={logout}>
             <LogOut />
-            <span className="group-data-[collapsible=icon]:hidden">{t("signOut")}</span>
+            <span className="truncate group-data-[collapsible=icon]:hidden">{t("signOut")}</span>
           </Button>
         </div>
       </SidebarFooter>

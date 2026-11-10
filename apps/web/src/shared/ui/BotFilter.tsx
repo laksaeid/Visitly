@@ -19,12 +19,22 @@ export function BotFilter({ includeBots, onChange }: Props) {
       }}
       aria-label={t("filterAria")}
       size="sm"
+      variant="outline"
+      className="w-full min-w-0"
     >
-      <ToggleGroupItem value="humans" aria-label={t("filterHumans")}>
-        {t("filterHumans")}
+      <ToggleGroupItem
+        value="humans"
+        aria-label={t("filterHumans")}
+        className="min-w-0 flex-1 px-2 text-xs"
+      >
+        <span className="truncate">{t("filterHumans")}</span>
       </ToggleGroupItem>
-      <ToggleGroupItem value="bots" aria-label={t("filterWithBots")}>
-        {t("filterWithBots")}
+      <ToggleGroupItem
+        value="bots"
+        aria-label={t("filterWithBots")}
+        className="min-w-0 flex-1 px-2 text-xs"
+      >
+        <span className="truncate">{t("filterWithBots")}</span>
       </ToggleGroupItem>
     </ToggleGroup>
   );
