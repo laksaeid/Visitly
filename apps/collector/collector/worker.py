@@ -41,13 +41,25 @@ def docker_log_files(container: str) -> List[str]:
     return [path + ".2", path + ".1", path]
 
 
+def _offset_for(path: str, inode: int, offsets: dict) -> int:
+    """Resolve byte offset, accepting both full and legacy inode-only keys."""
+    key = "%s:%s" % (path, inode)
+    if key in offsets:
+        return int(offsets.get(key) or 0)
+    # legacy hamerz-stats stored inode-only keys
+    legacy = str(inode)
+    if legacy in offsets:
+        return int(offsets.get(legacy) or 0)
+    return 0
+
+
 def _read_new_bytes(path: str, offsets: dict) -> Tuple[bytes, str, int]:
     """Return (complete_lines_bytes, offset_key, new_offset)."""
     if not os.path.exists(path):
         return b"", "", 0
     st = os.stat(path)
     key = "%s:%s" % (path, st.st_ino)
-    off = int(offsets.get(key, 0))
+    off = _offset_for(path, st.st_ino, offsets)
     if off > st.st_size:
         off = 0
     with open(path, "rb") as fh:

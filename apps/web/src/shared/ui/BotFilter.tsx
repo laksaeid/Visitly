@@ -1,3 +1,4 @@
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useLocale } from "@/shared/i18n";
 
 type Props = {
@@ -9,23 +10,22 @@ export function BotFilter({ includeBots, onChange }: Props) {
   const { t } = useLocale();
 
   return (
-    <div className="filter-group" role="group" aria-label={t("filterAria")}>
-      <button
-        type="button"
-        className={`filter-chip${!includeBots ? " is-active" : ""}`}
-        aria-pressed={!includeBots}
-        onClick={() => onChange(false)}
-      >
+    <ToggleGroup
+      type="single"
+      value={includeBots ? "bots" : "humans"}
+      onValueChange={(value) => {
+        if (!value) return;
+        onChange(value === "bots");
+      }}
+      aria-label={t("filterAria")}
+      size="sm"
+    >
+      <ToggleGroupItem value="humans" aria-label={t("filterHumans")}>
         {t("filterHumans")}
-      </button>
-      <button
-        type="button"
-        className={`filter-chip${includeBots ? " is-active" : ""}`}
-        aria-pressed={includeBots}
-        onClick={() => onChange(true)}
-      >
+      </ToggleGroupItem>
+      <ToggleGroupItem value="bots" aria-label={t("filterWithBots")}>
         {t("filterWithBots")}
-      </button>
-    </div>
+      </ToggleGroupItem>
+    </ToggleGroup>
   );
 }
