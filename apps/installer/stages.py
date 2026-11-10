@@ -99,16 +99,26 @@ def stage_configure(ctx: InstallContext) -> None:
             return preset
         return prompt(label, preset, secret=secret)
 
-    # Mirror profile for global vs Iran-friendly registries/images
+    # Mirror profile: prefer value already chosen in ./install.sh, else ask.
     mirror_preset = resolved("VISITLY_MIRROR_PROFILE", "global").lower()
     if ctx.non_interactive:
-        mirror_choice = "2" if mirror_preset in {"iran", "ir", "2"} else "1"
+        use_iran = mirror_preset in {"iran", "ir", "2"}
+        say(f"  Mirror profile: {'iran' if use_iran else 'global'}")
+    elif mirror_preset in {"iran", "ir", "2", "global", "1"}:
+        use_iran = mirror_preset in {"iran", "ir", "2"}
+        say(f"  Mirror profile: {'iran' if use_iran else 'global'} (from install.sh)")
+        if not confirm("Keep this mirror profile?", default=True, yes=ctx.yes):
+            say("  Build/package mirrors:")
+            say("    1) global — Docker Hub + PyPI + npmjs")
+            say("    2) iran   — Arvan / Tsinghua / npmmirror")
+            mirror_choice = prompt("Choose mirror profile", "2" if use_iran else "1")
+            use_iran = mirror_choice.strip() in {"2", "iran", "ir"}
     else:
         say("  Build/package mirrors:")
-        say("    1) global — Docker Hub + PyPI + npmjs (default)")
+        say("    1) global — Docker Hub + PyPI + npmjs")
         say("    2) iran   — Arvan / Tsinghua / npmmirror")
-        mirror_choice = prompt("Choose mirror profile", "2" if mirror_preset in {"iran", "ir"} else "1")
-    use_iran = mirror_choice.strip() in {"2", "iran", "ir"}
+        mirror_choice = prompt("Choose mirror profile", "1")
+        use_iran = mirror_choice.strip() in {"2", "iran", "ir"}
     mirrors = dict(IRAN_MIRRORS if use_iran else GLOBAL_MIRRORS)
     for key, value in mirrors.items():
         if not resolved(key):

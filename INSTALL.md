@@ -6,16 +6,15 @@ Visitly ships an **automated staged installer** so anyone can go from a git clon
 
 - Linux server recommended (nginx + Docker is the usual production setup)
 - Docker Engine with Compose plugin (`docker compose`)
-- Python **3.10+** on the host *or* Docker (old hosts like CentOS 7 / Python 3.6 are fine — `./install.sh` auto-runs the installer inside `python:3.12-slim`)
-- Outbound network to pull images / build deps (or use the Iran mirror profile)
+- Python **3.10+** on the host *or* Docker (old hosts like CentOS 7 / Python 3.6 are fine — `./install.sh` bootstraps Python 3.12 in Docker)
+- Outbound network to pull images / build deps
 
-If image pulls fail in Iran:
+At start, `./install.sh` asks you to select mirrors:
 
-```bash
-export VISITLY_MIRROR_PROFILE=iran
-export VISITLY_INSTALLER_IMAGE=docker.arvancloud.ir/library/python:3.12-slim
-./install.sh
-```
+1. **global** — Docker Hub + PyPI + npmjs  
+2. **iran** — Arvan + Tsinghua + npmmirror  
+
+No env exports are required for that choice.
 
 ## One-command install
 

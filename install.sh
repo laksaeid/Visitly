@@ -41,38 +41,66 @@ pick_host_python() {
   return 1
 }
 
-run_via_docker_python() {
-  local image="${VISITLY_INSTALLER_IMAGE:-}"
-  local images=()
-  if [[ -n "$image" ]]; then
-    images+=("$image")
-  else
-    # Prefer Iran mirror first when explicitly requested, else try global then Arvan.
-    if [[ "${VISITLY_MIRROR_PROFILE:-}" =~ ^(iran|ir|2)$ ]]; then
-      images+=(
-        "docker.arvancloud.ir/library/python:3.12-slim"
-        "python:3.12-slim"
-      )
-    else
-      images+=(
-        "python:3.12-slim"
-        "docker.arvancloud.ir/library/python:3.12-slim"
-      )
-    fi
+# Let the user pick global vs iran mirrors (no manual export required).
+# Honors VISITLY_MIRROR_PROFILE when already set (e.g. non-interactive).
+select_mirror_profile() {
+  if [[ -n "${VISITLY_MIRROR_PROFILE:-}" ]]; then
+    echo "${VISITLY_MIRROR_PROFILE}"
+    return 0
   fi
+
+  # Non-interactive without a profile: default global (override via env).
+  if [[ ! -t 0 ]] || [[ " $* " == *" --non-interactive "* ]]; then
+    echo "global"
+    return 0
+  fi
+
+  echo >&2
+  echo "Select build / package mirrors:" >&2
+  echo "  1) global — Docker Hub + PyPI + npmjs" >&2
+  echo "  2) iran   — Arvan + Tsinghua + npmmirror" >&2
+  local choice="1"
+  read -r -p "Choose [1/2] (default 1): " choice || true
+  choice="${choice:-1}"
+  case "$choice" in
+    2|iran|ir|IRAN|Iran) echo "iran" ;;
+    *) echo "global" ;;
+  esac
+}
+
+installer_images_for_profile() {
+  local profile="$1"
+  if [[ -n "${VISITLY_INSTALLER_IMAGE:-}" ]]; then
+    echo "${VISITLY_INSTALLER_IMAGE}"
+    return 0
+  fi
+  if [[ "$profile" == "iran" ]]; then
+    echo "docker.arvancloud.ir/library/python:3.12-slim"
+    echo "python:3.12-slim"
+  else
+    echo "python:3.12-slim"
+    echo "docker.arvancloud.ir/library/python:3.12-slim"
+  fi
+}
+
+run_via_docker_python() {
+  local profile="$1"
+  shift
 
   local chosen=""
   local candidate
-  for candidate in "${images[@]}"; do
+  while IFS= read -r candidate; do
+    [[ -z "$candidate" ]] && continue
     echo "Visitly → pulling installer runtime: $candidate"
     if docker pull "$candidate"; then
       chosen="$candidate"
       break
     fi
-  done
+  done < <(installer_images_for_profile "$profile")
+
   if [[ -z "$chosen" ]]; then
     echo "ERROR: could not pull a Python 3.12 image for the installer." >&2
-    echo "Set VISITLY_INSTALLER_IMAGE to a reachable python:3.12 image and retry." >&2
+    echo "Pick the other mirror profile, or set VISITLY_INSTALLER_IMAGE and retry." >&2
     exit 1
   fi
 
@@ -89,14 +117,12 @@ run_via_docker_python() {
     -v "$ROOT":"$ROOT"
   )
 
-  # Host compose plugin (needed for `docker compose` inside the container).
   if [[ -d /usr/libexec/docker/cli-plugins ]]; then
     mount_flags+=(-v /usr/libexec/docker/cli-plugins:/usr/libexec/docker/cli-plugins:ro)
   elif [[ -d /usr/local/lib/docker/cli-plugins ]]; then
     mount_flags+=(-v /usr/local/lib/docker/cli-plugins:/usr/local/lib/docker/cli-plugins:ro)
   fi
 
-  # Allow writing cron + reading typical nginx paths during install.
   if [[ -d /etc/cron.d ]]; then
     mount_flags+=(-v /etc/cron.d:/etc/cron.d)
   fi
@@ -104,7 +130,6 @@ run_via_docker_python() {
     mount_flags+=(-v /root:/root)
   fi
 
-  # Forward Visitly/Postgres config env vars into the installer container.
   local env_flags=()
   local line key
   while IFS= read -r line; do
@@ -122,11 +147,16 @@ run_via_docker_python() {
     --pid host \
     "${mount_flags[@]}" \
     "${env_flags[@]}" \
-    -e VISITLY_INSTALLER_IMAGE="$chosen" \
+    -e "VISITLY_MIRROR_PROFILE=$profile" \
+    -e "VISITLY_INSTALLER_IMAGE=$chosen" \
     -w "$ROOT" \
     "$chosen" \
     python3 "$ROOT/install.py" "$@"
 }
+
+MIRROR_PROFILE="$(select_mirror_profile "$*")"
+export VISITLY_MIRROR_PROFILE="$MIRROR_PROFILE"
+echo "Visitly → mirror profile: $MIRROR_PROFILE"
 
 HOST_PYTHON="$(pick_host_python || true)"
 if [[ -n "${HOST_PYTHON}" ]]; then
@@ -142,4 +172,4 @@ elif command -v python >/dev/null 2>&1; then
 fi
 
 echo "Visitly → host Python ${HOST_PY_VERSION} < 3.10; bootstrapping via Docker"
-run_via_docker_python "$@"
+run_via_docker_python "$MIRROR_PROFILE" "$@"
