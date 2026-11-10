@@ -1,13 +1,15 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # Use Arvan Docker Hub mirror (same as other services on this host)
+    image: docker.arvancloud.ir/library/postgres:16-alpine
     container_name: visitly-pg
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-visitly}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-visitly_dev_change_me}
       POSTGRES_DB: ${POSTGRES_DB:-visitly}
+    # Bind only to localhost on a free port — do NOT use 5432 (production uses it)
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - ./.postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -15,25 +17,27 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    restart: unless-stopped
 
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-      # Host network so pip can resolve mirrors when Docker DNS is broken
       network: host
       args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirror.arvancloud.ir/pypi/simple}
-        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirror.arvancloud.ir}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}
     container_name: visitly-api
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-visitly}:${POSTGRES_PASSWORD:-visitly_dev_change_me}@postgres:5432/${POSTGRES_DB:-visitly}
+      VISITLY_HOST: 0.0.0.0
     ports:
-      - "3099:3099"
+      - "127.0.0.1:3099:3099"
     depends_on:
       postgres:
         condition: service_healthy
+    restart: unless-stopped
 
   web:
     build:
@@ -41,12 +45,14 @@ services:
       dockerfile: apps/web/Dockerfile
       network: host
       args:
-        NPM_REGISTRY: ${NPM_REGISTRY:-https://mirror.arvancloud.ir/npm/}
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com}
     container_name: visitly-web
     ports:
-      - "8080:80"
+      - "127.0.0.1:8088:80"
     depends_on:
       - api
+    restart: unless-stopped
+    profiles: ["web"]
 
   collector:
     build:
@@ -54,17 +60,19 @@ services:
       dockerfile: apps/collector/Dockerfile
       network: host
       args:
-        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirror.arvancloud.ir/pypi/simple}
-        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirror.arvancloud.ir}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-pypi.tuna.tsinghua.edu.cn}
     container_name: visitly-collector
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-visitly}:${POSTGRES_PASSWORD:-visitly_dev_change_me}@postgres:5432/${POSTGRES_DB:-visitly}
-      VISITLY_LOG_SOURCE: ${VISITLY_LOG_SOURCE:-file}
-      VISITLY_LOG_PATH: /var/log/nginx/access.log
+      VISITLY_LOG_SOURCE: ${VISITLY_LOG_SOURCE:-docker}
+      VISITLY_DOCKER_CONTAINER: ${VISITLY_DOCKER_CONTAINER:-hamerz-nginx-edge}
     volumes:
-      - ${VISITLY_HOST_LOG_DIR:-./logs}:/var/log/nginx:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       postgres:
         condition: service_healthy
     profiles: ["collector"]
+    restart: unless-stopped

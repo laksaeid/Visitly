@@ -2,8 +2,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-ARG PIP_INDEX_URL=https://mirror.arvancloud.ir/pypi/simple
-ARG PIP_TRUSTED_HOST=mirror.arvancloud.ir
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
 
 ENV PIP_DEFAULT_TIMEOUT=120 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \

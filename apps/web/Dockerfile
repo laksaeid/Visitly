@@ -1,7 +1,7 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 
-ARG NPM_REGISTRY=https://mirror.arvancloud.ir/npm/
+ARG NPM_REGISTRY=https://registry.npmmirror.com
 
 COPY apps/web/package.json apps/web/package-lock.json* ./
 RUN npm config set registry "$NPM_REGISTRY" \
