@@ -81,7 +81,7 @@ export function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
-          <button className="login-submit" type="submit" disabled={busy}>
+          <button className="login-submit" type="submit" disabled={busy} aria-busy={busy}>
             {t("signIn")}
           </button>
           <p className="login-hint">{t("loginHint")}</p>

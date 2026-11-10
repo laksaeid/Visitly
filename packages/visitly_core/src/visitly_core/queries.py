@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from visitly_core.constants import ELIGIBLE_SQL
+from visitly_core.constants import eligible_sql
 from visitly_core.db import one
 from visitly_core.settings import get_runtime_config
 from visitly_core.timeutil import day_shift, format_local, local_day, local_hour_key
@@ -26,11 +26,15 @@ def _eligible_params(start: str, end: str, cap: Optional[int] = None) -> dict:
     return {"start": start, "end": end, "cap": _cap() if cap is None else cap}
 
 
-def totals(session: Session, start: str, end: str) -> Dict[str, int]:
+def _sql(include_bots: bool) -> str:
+    return eligible_sql(include_bots)
+
+
+def totals(session: Session, start: str, end: str, *, include_bots: bool = False) -> Dict[str, int]:
     visitors, views = session.execute(
         text(
             "SELECT COUNT(DISTINCT ip), COALESCE(SUM(pv), 0) FROM (%s) e"
-            % ELIGIBLE_SQL
+            % _sql(include_bots)
         ),
         _eligible_params(start, end),
     ).fetchone()
@@ -57,23 +61,46 @@ def available_days(session: Session) -> List[str]:
     return [r[0] for r in rows]
 
 
-def day_hourly(session: Session, day: str) -> List[Dict[str, Any]]:
-    hour_rows = {
-        r[0]: r
-        for r in session.execute(
-            text(
-                """
-                SELECT v.hour, COUNT(DISTINCT v.ip), COALESCE(SUM(v.pageviews), 0)
-                FROM visits v
-                JOIN (%s) e ON e.day = v.day AND e.ip = v.ip
-                WHERE v.day = :day AND v.human = 1
-                GROUP BY v.hour
-                """
-                % ELIGIBLE_SQL
-            ),
-            {**_eligible_params(day, day), "day": day},
-        ).fetchall()
-    }
+def day_hourly(
+    session: Session,
+    day: str,
+    *,
+    include_bots: bool = False,
+) -> List[Dict[str, Any]]:
+    if include_bots:
+        hour_rows = {
+            r[0]: r
+            for r in session.execute(
+                text(
+                    """
+                    SELECT hour,
+                           COUNT(DISTINCT ip),
+                           COALESCE(SUM(pageviews + bot_pageviews), 0)
+                    FROM visits
+                    WHERE day = :day AND (pageviews + bot_pageviews) > 0
+                    GROUP BY hour
+                    """
+                ),
+                {"day": day},
+            ).fetchall()
+        }
+    else:
+        hour_rows = {
+            r[0]: r
+            for r in session.execute(
+                text(
+                    """
+                    SELECT v.hour, COUNT(DISTINCT v.ip), COALESCE(SUM(v.pageviews), 0)
+                    FROM visits v
+                    JOIN (%s) e ON e.day = v.day AND e.ip = v.ip
+                    WHERE v.day = :day AND v.human = 1
+                    GROUP BY v.hour
+                    """
+                    % _sql(False)
+                ),
+                {**_eligible_params(day, day), "day": day},
+            ).fetchall()
+        }
     hourly = []
     for h in range(24):
         key = local_hour_key(day, h)
@@ -107,6 +134,8 @@ def day_top_pages(
     end: str,
     limit: int = 5000,
     keep: Optional[int] = 5,
+    *,
+    include_bots: bool = False,
 ) -> List[dict]:
     rows = [
         {"path": r[0], "views": int(r[1])}
@@ -120,7 +149,7 @@ def day_top_pages(
                 ORDER BY v DESC
                 LIMIT :limit
                 """
-                % ELIGIBLE_SQL
+                % _sql(include_bots)
             ),
             {**_eligible_params(start, end), "limit": limit},
         ).fetchall()
@@ -136,6 +165,8 @@ def day_top_referers(
     end: str,
     limit: int = 5000,
     keep: Optional[int] = 5,
+    *,
+    include_bots: bool = False,
 ) -> List[dict]:
     rows = [
         {"referer": r[0], "views": int(r[1])}
@@ -149,7 +180,7 @@ def day_top_referers(
                 ORDER BY v DESC
                 LIMIT :limit
                 """
-                % ELIGIBLE_SQL
+                % _sql(include_bots)
             ),
             {**_eligible_params(start, end), "limit": limit},
         ).fetchall()
@@ -159,56 +190,15 @@ def day_top_referers(
     return collapse_tail(rows, "referer", keep=keep)
 
 
-def build_top_list(session: Session, kind: str, day: str) -> Optional[dict]:
-    today = local_day()
-    days = available_days(session)
-    if day not in days and day != today:
-        return None
-    if kind == "pages":
-        rows = day_top_pages(session, day, day, keep=None)
-        name_key = "path"
-        title = "Top pages"
-    elif kind in ("refs", "referers", "sources"):
-        rows = day_top_referers(session, day, day, keep=None)
-        name_key = "referer"
-        title = "Traffic sources"
-        kind = "refs"
-    else:
-        return None
-    total_views = sum(int(r.get("views") or 0) for r in rows)
-    return {
-        "kind": kind,
-        "title": title,
-        "name_key": name_key,
-        "day": day,
-        "is_today": day == today,
-        "timezone": _tz_name(),
-        "available_days": days if days else [today],
-        "count": len(rows),
-        "total_views": total_views,
-        "rows": rows,
-    }
-
-
-def build_day_payload(session: Session, day: str) -> Optional[dict]:
-    today = local_day()
-    since = one(session, "SELECT MIN(day) FROM visits") or today
-    days = available_days(session)
-    if day not in days and day != today:
-        return None
-
-    t = totals(session, day, day)
-    bots = one(
-        session,
-        "SELECT COALESCE(SUM(bot_pageviews), 0) FROM visits WHERE day = :day",
-        {"day": day},
-    )
-    reqs = one(
-        session,
-        "SELECT COALESCE(SUM(requests), 0) FROM visits WHERE day = :day",
-        {"day": day},
-    )
-    prev = day_shift(day, -1)
+def _returning_count(
+    session: Session,
+    day: str,
+    since: str,
+    prev: str,
+    *,
+    include_bots: bool,
+) -> int:
+    sql = _sql(include_bots)
     returning = session.execute(
         text(
             """
@@ -217,10 +207,10 @@ def build_day_payload(session: Session, day: str) -> Optional[dict]:
             JOIN (%s) p ON p.ip = t.ip
             """
             % (
-                ELIGIBLE_SQL.replace(":start", ":t_start")
+                sql.replace(":start", ":t_start")
                 .replace(":end", ":t_end")
                 .replace(":cap", ":t_cap"),
-                ELIGIBLE_SQL.replace(":start", ":p_start")
+                sql.replace(":start", ":p_start")
                 .replace(":end", ":p_end")
                 .replace(":cap", ":p_cap"),
             )
@@ -234,6 +224,74 @@ def build_day_payload(session: Session, day: str) -> Optional[dict]:
             "p_cap": _cap(),
         },
     ).fetchone()[0]
+    return int(returning or 0)
+
+
+def build_top_list(
+    session: Session,
+    kind: str,
+    day: str,
+    *,
+    include_bots: bool = False,
+) -> Optional[dict]:
+    today = local_day()
+    days = available_days(session)
+    if day not in days and day != today:
+        return None
+    if kind == "pages":
+        rows = day_top_pages(session, day, day, keep=None, include_bots=include_bots)
+        name_key = "path"
+        title = "Top pages"
+    elif kind in ("refs", "referers", "sources"):
+        rows = day_top_referers(session, day, day, keep=None, include_bots=include_bots)
+        name_key = "referer"
+        title = "Traffic sources"
+        kind = "refs"
+    else:
+        return None
+    total_views = sum(int(r.get("views") or 0) for r in rows)
+    return {
+        "kind": kind,
+        "title": title,
+        "name_key": name_key,
+        "day": day,
+        "is_today": day == today,
+        "timezone": _tz_name(),
+        "include_bots": include_bots,
+        "available_days": days if days else [today],
+        "count": len(rows),
+        "total_views": total_views,
+        "rows": rows,
+    }
+
+
+def build_day_payload(
+    session: Session,
+    day: str,
+    *,
+    include_bots: bool = False,
+) -> Optional[dict]:
+    today = local_day()
+    since = one(session, "SELECT MIN(day) FROM visits") or today
+    days = available_days(session)
+    if day not in days and day != today:
+        return None
+
+    t = totals(session, day, day, include_bots=include_bots)
+    bots = one(
+        session,
+        "SELECT COALESCE(SUM(bot_pageviews), 0) FROM visits WHERE day = :day",
+        {"day": day},
+    )
+    reqs = one(
+        session,
+        "SELECT COALESCE(SUM(requests), 0) FROM visits WHERE day = :day",
+        {"day": day},
+    )
+    prev = day_shift(day, -1)
+    returning = _returning_count(
+        session, day, since, prev, include_bots=include_bots
+    )
 
     return {
         "day": day,
@@ -241,20 +299,26 @@ def build_day_payload(session: Session, day: str) -> Optional[dict]:
         "timezone": _tz_name(),
         "day_window": "00:00–24:00",
         "since": since,
+        "include_bots": include_bots,
         "available_days": days if days else [today],
         "totals": dict(
             t,
             bot_pageviews=int(bots or 0),
             requests=int(reqs or 0),
-            returning=int(returning or 0),
+            returning=returning,
         ),
-        "hourly": day_hourly(session, day),
-        "top_pages": day_top_pages(session, day, day),
-        "top_referers": day_top_referers(session, day, day),
+        "hourly": day_hourly(session, day, include_bots=include_bots),
+        "top_pages": day_top_pages(session, day, day, include_bots=include_bots),
+        "top_referers": day_top_referers(session, day, day, include_bots=include_bots),
     }
 
 
-def build_payload(session: Session, day: Optional[str] = None) -> dict:
+def build_payload(
+    session: Session,
+    day: Optional[str] = None,
+    *,
+    include_bots: bool = False,
+) -> dict:
     now = int(time.time())
     today = local_day(now)
     if day is None:
@@ -280,7 +344,7 @@ def build_payload(session: Session, day: Optional[str] = None) -> dict:
                 FROM (%s) e
                 GROUP BY day
                 """
-                % ELIGIBLE_SQL
+                % _sql(include_bots)
             ),
             _eligible_params(chart_start, today),
         ).fetchall()
@@ -308,16 +372,16 @@ def build_payload(session: Session, day: Optional[str] = None) -> dict:
             "visitors_all": all_rows.get(d, 0),
         })
 
-    selected = build_day_payload(session, day)
+    selected = build_day_payload(session, day, include_bots=include_bots)
     if selected is None:
-        selected = build_day_payload(session, today)
+        selected = build_day_payload(session, today, include_bots=include_bots)
         day = today
 
-    t_today = totals(session, today, today)
-    t_yesterday = totals(session, yday, yday)
-    t_week = totals(session, week_start, today)
-    t_month = totals(session, month_start, today)
-    t_all = totals(session, since, today)
+    t_today = totals(session, today, today, include_bots=include_bots)
+    t_yesterday = totals(session, yday, yday, include_bots=include_bots)
+    t_week = totals(session, week_start, today, include_bots=include_bots)
+    t_month = totals(session, month_start, today, include_bots=include_bots)
+    t_all = totals(session, since, today, include_bots=include_bots)
     all_ips = one(
         session,
         """
@@ -325,31 +389,9 @@ def build_payload(session: Session, day: Optional[str] = None) -> dict:
         WHERE (pageviews + bot_pageviews) > 0
         """,
     )
-    returning = session.execute(
-        text(
-            """
-            SELECT COUNT(DISTINCT t.ip)
-            FROM (%s) t
-            JOIN (%s) p ON p.ip = t.ip
-            """
-            % (
-                ELIGIBLE_SQL.replace(":start", ":t_start")
-                .replace(":end", ":t_end")
-                .replace(":cap", ":t_cap"),
-                ELIGIBLE_SQL.replace(":start", ":p_start")
-                .replace(":end", ":p_end")
-                .replace(":cap", ":p_cap"),
-            )
-        ),
-        {
-            "t_start": today,
-            "t_end": today,
-            "t_cap": _cap(),
-            "p_start": since,
-            "p_end": yday,
-            "p_cap": _cap(),
-        },
-    ).fetchone()[0]
+    returning = _returning_count(
+        session, today, since, yday, include_bots=include_bots
+    )
     today_bots = one(
         session,
         "SELECT COALESCE(SUM(bot_pageviews), 0) FROM visits WHERE day = :day",
@@ -369,6 +411,7 @@ def build_payload(session: Session, day: Optional[str] = None) -> dict:
         "since": since,
         "today": today,
         "selected_day": day,
+        "include_bots": include_bots,
         "available_days": days_list if days_list else [today],
         "totals": {
             "today": dict(
@@ -384,7 +427,7 @@ def build_payload(session: Session, day: Optional[str] = None) -> dict:
                 "visitors_all": int(all_ips or 0),
                 "pageviews": t_all["pageviews"],
             },
-            "returning_today": int(returning or 0),
+            "returning_today": returning,
         },
         "daily": daily,
         "hourly": selected["hourly"],

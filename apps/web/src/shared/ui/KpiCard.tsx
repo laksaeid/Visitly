@@ -7,10 +7,10 @@ type Props = {
 
 export function KpiCard({ label, value, sub, primary }: Props) {
   return (
-    <div className={`kpi${primary ? " primary" : ""}`}>
+    <article className={`kpi${primary ? " primary" : ""}`}>
       <div className="kpi-label">{label}</div>
       <div className="kpi-value">{value}</div>
       <div className="kpi-sub">{sub}</div>
-    </div>
+    </article>
   );
 }

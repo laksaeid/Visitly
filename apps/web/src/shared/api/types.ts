@@ -43,6 +43,7 @@ export type OverviewPayload = {
   since: string;
   today: string;
   selected_day: string;
+  include_bots?: boolean;
   available_days: string[];
   totals: {
     today: Totals;
@@ -71,6 +72,7 @@ export type TopListPayload = {
   day: string;
   is_today: boolean;
   timezone: string;
+  include_bots?: boolean;
   available_days: string[];
   count: number;
   total_views: number;

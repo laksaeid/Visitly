@@ -5,9 +5,15 @@ import type { OverviewPayload } from "@/shared/api/types";
 import { dayLabel, fmt, pct, shortDay } from "@/shared/dates";
 import { useLocale } from "@/shared/i18n";
 import { BarChart } from "@/shared/ui/BarChart";
+import { BotFilter } from "@/shared/ui/BotFilter";
 import { KpiCard } from "@/shared/ui/KpiCard";
 import { LangToggle } from "@/shared/ui/LangToggle";
 import { useAuth } from "@/features/auth/AuthContext";
+
+function readBotsParam(params: URLSearchParams) {
+  const v = (params.get("bots") || "").toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
 
 export function DashboardPage() {
   const { logout, config } = useAuth();
@@ -15,22 +21,33 @@ export function DashboardPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const selectedDay = params.get("day");
+  const includeBots = readBotsParam(params);
   const [data, setData] = useState<OverviewPayload | null>(null);
   const [error, setError] = useState("");
   const site = config?.site_name || "Visitly";
 
-  const load = useCallback(async (day?: string | null) => {
+  const patchParams = useCallback(
+    (patch: Record<string, string | null>, replace = false) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [k, v] of Object.entries(patch)) {
+          if (v === null || v === "") next.delete(k);
+          else next.set(k, v);
+        }
+        return next;
+      }, { replace });
+    },
+    [setParams],
+  );
+
+  const load = useCallback(async (day?: string | null, bots = false) => {
     try {
-      const payload = await api.overview(day);
+      const payload = await api.overview(day, bots);
       setData(payload);
       setError("");
       const next = payload.selected_day;
       if (next && next !== day) {
-        setParams((prev) => {
-          const p = new URLSearchParams(prev);
-          p.set("day", next);
-          return p;
-        }, { replace: true });
+        patchParams({ day: next }, true);
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -39,13 +56,13 @@ export function DashboardPage() {
       }
       setError(err instanceof Error ? err.message : "network error");
     }
-  }, [navigate, setParams]);
+  }, [navigate, patchParams]);
 
   useEffect(() => {
-    void load(selectedDay);
-    const timer = window.setInterval(() => void load(selectedDay), 60000);
+    void load(selectedDay, includeBots);
+    const timer = window.setInterval(() => void load(selectedDay, includeBots), 60000);
     return () => window.clearInterval(timer);
-  }, [load, selectedDay]);
+  }, [load, selectedDay, includeBots]);
 
   const day = data?.day;
   const dayKey = selectedDay || data?.selected_day || data?.today || "";
@@ -53,11 +70,25 @@ export function DashboardPage() {
   const dayIndex = days.indexOf(dayKey);
 
   const selectDay = (dayValue: string) => {
-    setParams({ day: dayValue });
+    patchParams({
+      day: dayValue,
+      bots: includeBots ? "1" : null,
+    });
   };
 
-  const listUrl = (kind: string) =>
-    `/list?kind=${encodeURIComponent(kind)}${dayKey ? `&day=${encodeURIComponent(dayKey)}` : ""}`;
+  const setIncludeBots = (next: boolean) => {
+    patchParams({
+      day: dayKey || null,
+      bots: next ? "1" : null,
+    });
+  };
+
+  const listUrl = (kind: string) => {
+    const q = new URLSearchParams({ kind });
+    if (dayKey) q.set("day", dayKey);
+    if (includeBots) q.set("bots", "1");
+    return `/list?${q.toString()}`;
+  };
 
   const dailyRows = useMemo(
     () =>
@@ -75,7 +106,7 @@ export function DashboardPage() {
   if (!data) {
     return (
       <div className="wrap">
-        {error ? <div className="error">{t("loadError", { error })}</div> : null}
+        {error ? <div className="error" role="alert">{t("loadError", { error })}</div> : null}
         <p className="sub">{t("loading")}</p>
       </div>
     );
@@ -83,40 +114,49 @@ export function DashboardPage() {
 
   const totals = data.totals;
   const dt = day?.totals;
+  const pvSubKey = includeBots ? "subPageviewsAll" : "subPageviewsIps";
 
   return (
     <div className="wrap" key={locale}>
       <header className="top">
         <div>
-          <div className="eyebrow">{site.toUpperCase()}</div>
+          <div className="eyebrow">{site}</div>
           <h1>{t("trafficStats")}</h1>
           <p className="sub">{t("trafficSub", { timezone: data.timezone })}</p>
         </div>
         <div className="top-actions">
-          <div className="live">
-            <span className="dot" />
+          <div className="live" aria-live="polite">
+            <span className="dot" aria-hidden="true" />
             <span>{t("updated", { time: data.generated })}</span>
           </div>
           <LangToggle />
-          <button type="button" className="logout" onClick={logout}>
+          <button type="button" className="btn ghost" onClick={logout}>
             {t("signOut")}
           </button>
         </div>
       </header>
 
+      <section className="toolbar" aria-label={t("filterAria")}>
+        <BotFilter includeBots={includeBots} onChange={setIncludeBots} />
+        <p className="filter-hint">
+          {includeBots ? t("filterHintBots") : t("filterHintHumans")}
+        </p>
+      </section>
+
       <nav className="nav" aria-label={t("day")}>
         <div className="nav-day">
-          <button type="button" disabled={dayIndex <= 0} onClick={() => dayIndex > 0 && selectDay(days[dayIndex - 1])}>
+          <button type="button" className="btn soft" disabled={dayIndex <= 0} onClick={() => dayIndex > 0 && selectDay(days[dayIndex - 1])}>
             {t("previous")}
           </button>
           <button
             type="button"
+            className="btn soft"
             disabled={dayIndex < 0 || dayIndex >= days.length - 1}
             onClick={() => dayIndex >= 0 && dayIndex < days.length - 1 && selectDay(days[dayIndex + 1])}
           >
             {t("next")}
           </button>
-          <button type="button" className="today-btn" onClick={() => selectDay(data.today)}>
+          <button type="button" className="btn accent" onClick={() => selectDay(data.today)}>
             {t("today")}
           </button>
         </div>
@@ -137,14 +177,14 @@ export function DashboardPage() {
         </div>
       </nav>
 
-      {error ? <div className="error">{t("loadErrorRetry", { error })}</div> : null}
+      {error ? <div className="error" role="alert">{t("loadErrorRetry", { error })}</div> : null}
 
       <section className="kpis" aria-label={t("summary")}>
         <KpiCard
           primary
           label={t("kpiToday")}
           value={fmt(totals.today.visitors)}
-          sub={t("subPageviewsIps", {
+          sub={t(pvSubKey, {
             pageviews: fmt(totals.today.pageviews),
             ips: fmt(totals.today.visitors_all),
           })}
@@ -189,7 +229,10 @@ export function DashboardPage() {
           <KpiCard
             label={t("pageviews")}
             value={fmt(dt.pageviews)}
-            sub={t("subIpsBots", { ips: fmt(dt.visitors_all) })}
+            sub={t(includeBots ? "subPageviewsAll" : "subIpsBots", {
+              pageviews: fmt(dt.pageviews),
+              ips: fmt(dt.visitors_all),
+            })}
           />
           <KpiCard
             label={t("botPageviews")}
@@ -264,7 +307,7 @@ export function DashboardPage() {
             <h2>{t("topPages")}</h2>
             <Link className="more-link" to={listUrl("pages")}>{t("viewAll")}</Link>
           </div>
-          <div className="hint" style={{ margin: "-6px 0 12px" }}>
+          <div className="hint" style={{ margin: "-2px 0 12px" }}>
             {t("onDay", { day: dayLabel(dayKey) })}
           </div>
           <StatsTable
@@ -286,7 +329,7 @@ export function DashboardPage() {
             <h2>{t("trafficSources")}</h2>
             <Link className="more-link" to={listUrl("refs")}>{t("viewAll")}</Link>
           </div>
-          <div className="hint" style={{ margin: "-6px 0 12px" }}>
+          <div className="hint" style={{ margin: "-2px 0 12px" }}>
             {t("onDay", { day: dayLabel(dayKey) })}
           </div>
           <StatsTable
@@ -306,7 +349,7 @@ export function DashboardPage() {
       </section>
 
       <footer>
-        <p>{t("footerUnique")}</p>
+        <p>{includeBots ? t("footerUniqueBots") : t("footerUnique")}</p>
         <p>
           {t("footerSource", {
             timezone: data.timezone,

@@ -51,17 +51,19 @@ export const api = {
       body: JSON.stringify({ user, password }),
     }),
   logoutUrl: () => `${BASE}/api/logout`,
-  overview: (day?: string | null) => {
+  overview: (day?: string | null, includeBots = false) => {
     const q = new URLSearchParams();
     if (day) q.set("day", day);
+    if (includeBots) q.set("bots", "true");
     q.set("ts", String(Date.now()));
     return request<import("./types").OverviewPayload>(
       `/api/overview?${q.toString()}`,
     );
   },
-  top: (kind: string, day?: string | null) => {
+  top: (kind: string, day?: string | null, includeBots = false) => {
     const q = new URLSearchParams({ kind });
     if (day) q.set("day", day);
+    if (includeBots) q.set("bots", "true");
     q.set("ts", String(Date.now()));
     return request<import("./types").TopListPayload>(`/api/top?${q.toString()}`);
   },

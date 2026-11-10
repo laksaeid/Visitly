@@ -86,6 +86,14 @@ export const messages = {
     langSwitchToFa: "فارسی",
     langSwitchToEn: "English",
     langAria: "Change language",
+    filterHumans: "Humans only",
+    filterWithBots: "Include bots",
+    filterAria: "Traffic filter",
+    filterHintHumans: "Showing human traffic only (default)",
+    filterHintBots: "Showing human + bot traffic",
+    subPageviewsAll: "{pageviews} pageviews · {ips} total IPs",
+    footerUniqueBots:
+      "With bots enabled, unique visitors include privacy-hashed IPs that made page requests from bots or humans. Bot detection uses User-Agent patterns.",
   },
   fa: {
     trafficStats: "آمار ترافیک",
@@ -146,6 +154,8 @@ export const messages = {
     colViews: "بازدید",
     footerUnique:
       "بازدیدکننده یکتا یعنی یک آی‌پی هش‌شده با حداقل یک بازدید غیربات. ربات‌ها با User-Agent فیلتر می‌شوند. NAT و آی‌پی پویا اعداد را تقریبی می‌کند.",
+    footerUniqueBots:
+      "با فعال بودن ربات‌ها، بازدیدکننده یکتا شامل آی‌پی‌های هش‌شده‌ای است که درخواست صفحه از ربات یا انسان داشته‌اند. تشخیص ربات بر اساس الگوی User-Agent است.",
     footerSource:
       "منبع: لاگ nginx · منطقه زمانی {timezone} · بازه روز ۰۰:۰۰–۲۴:۰۰ · ردیابی از {since}",
     fullList: "فهرست کامل",
@@ -172,6 +182,12 @@ export const messages = {
     langSwitchToFa: "فارسی",
     langSwitchToEn: "English",
     langAria: "تغییر زبان",
+    filterHumans: "فقط انسان",
+    filterWithBots: "با ربات",
+    filterAria: "فیلتر ترافیک",
+    filterHintHumans: "نمایش ترافیک انسانی (پیش‌فرض)",
+    filterHintBots: "نمایش ترافیک انسان + ربات",
+    subPageviewsAll: "{pageviews} بازدید صفحه · {ips} آی‌پی کل",
   },
 } as const;
 

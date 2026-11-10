@@ -173,6 +173,6 @@ def classify_record(rec: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "pageviews": 1 if human else 0,
         "bot_pageviews": 1 if (page and bot) else 0,
         "path": rec["path"],
-        "referer_src": referer_key(rec["referer"]) if human else None,
+        "referer_src": referer_key(rec["referer"]) if page else None,
         "is_page": page,
     }

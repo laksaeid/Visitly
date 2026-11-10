@@ -36,9 +36,10 @@ def overview(
     _user: CurrentUser,
     db: DbSession,
     day: Optional[str] = Query(default=None),
+    bots: bool = Query(default=False, description="Include bot traffic in stats"),
 ) -> Dict[str, Any]:
     day = _require_day(day)
-    return stats_service.overview(db, day)
+    return stats_service.overview(db, day, include_bots=bots)
 
 
 @router.get("/api/day")
@@ -46,9 +47,10 @@ def day_detail(
     _user: CurrentUser,
     db: DbSession,
     day: str = Query(...),
+    bots: bool = Query(default=False),
 ) -> Dict[str, Any]:
     day = _require_day(day, required=True)  # type: ignore[assignment]
-    data = stats_service.day_detail(db, day)
+    data = stats_service.day_detail(db, day, include_bots=bots)
     if data is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -63,11 +65,12 @@ def top_list(
     db: DbSession,
     kind: str = Query(default="pages"),
     day: Optional[str] = Query(default=None),
+    bots: bool = Query(default=False),
 ) -> Dict[str, Any]:
     if not day:
         day = local_day()
     day = _require_day(day, required=True)  # type: ignore[assignment]
-    data = stats_service.top_list(db, kind, day)
+    data = stats_service.top_list(db, kind, day, include_bots=bots)
     if data is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -28,25 +28,40 @@ export function BarChart({
 }: Props) {
   const has = rows.some((r) => r.value > 0);
   if (!has) {
-    return <div className={`chart ${className || ""}`}><div className="empty">{empty}</div></div>;
+    return (
+      <div className={`chart ${className || ""}`}>
+        <div className="empty">{empty}</div>
+      </div>
+    );
   }
   const max = Math.max(...rows.map((r) => r.value), 1);
   return (
     <div className={`chart ${className || ""}${few ? " few" : ""}`}>
-      <div className="plot">
-        {rows.map((r) => (
-          <div
-            key={r.key}
-            className="col"
-            onClick={() => onClick?.(r)}
-            title={title(r)}
-          >
-            <div
-              className={`bar${r.value ? "" : " zero"}${r.active ? " active" : ""}`}
-              style={{ height: `${r.value ? Math.max(2, (r.value / max) * 100) : 1}%` }}
-            />
-          </div>
-        ))}
+      <div className="plot" role="img" aria-label="chart">
+        {rows.map((r) =>
+          onClick ? (
+            <button
+              key={r.key}
+              type="button"
+              className="col is-clickable"
+              onClick={() => onClick(r)}
+              title={title(r)}
+              aria-label={title(r)}
+            >
+              <div
+                className={`bar${r.value ? "" : " zero"}${r.active ? " active" : ""}`}
+                style={{ height: `${r.value ? Math.max(2, (r.value / max) * 100) : 1}%` }}
+              />
+            </button>
+          ) : (
+            <div key={r.key} className="col" title={title(r)}>
+              <div
+                className={`bar${r.value ? "" : " zero"}${r.active ? " active" : ""}`}
+                style={{ height: `${r.value ? Math.max(2, (r.value / max) * 100) : 1}%` }}
+              />
+            </div>
+          ),
+        )}
       </div>
       <div className="xlabels">
         {rows.map((r, i) => {

@@ -4,8 +4,14 @@ import { ApiError, api } from "@/shared/api/client";
 import type { TopListPayload } from "@/shared/api/types";
 import { dayLabel, fmt } from "@/shared/dates";
 import { useLocale } from "@/shared/i18n";
+import { BotFilter } from "@/shared/ui/BotFilter";
 import { LangToggle } from "@/shared/ui/LangToggle";
 import { useAuth } from "@/features/auth/AuthContext";
+
+function readBotsParam(params: URLSearchParams) {
+  const v = (params.get("bots") || "").toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
 
 export function TopListPage() {
   const { config } = useAuth();
@@ -14,18 +20,37 @@ export function TopListPage() {
   const navigate = useNavigate();
   const kind = (params.get("kind") || "pages").toLowerCase() === "refs" ? "refs" : "pages";
   const day = params.get("day");
+  const includeBots = readBotsParam(params);
   const [data, setData] = useState<TopListPayload | null>(null);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
   const site = config?.site_name || "Visitly";
 
+  const patchParams = useCallback(
+    (patch: Record<string, string | null>) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev);
+        for (const [k, v] of Object.entries(patch)) {
+          if (v === null || v === "") next.delete(k);
+          else next.set(k, v);
+        }
+        return next;
+      });
+    },
+    [setParams],
+  );
+
   const load = useCallback(async () => {
     try {
-      const payload = await api.top(kind, day);
+      const payload = await api.top(kind, day, includeBots);
       setData(payload);
       setError("");
       if (payload.day && payload.day !== day) {
-        setParams({ kind, day: payload.day }, { replace: true });
+        patchParams({
+          kind,
+          day: payload.day,
+          bots: includeBots ? "1" : null,
+        });
       }
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -34,7 +59,7 @@ export function TopListPage() {
       }
       setError(err instanceof Error ? err.message : "network error");
     }
-  }, [day, kind, navigate, setParams]);
+  }, [day, kind, includeBots, navigate, patchParams]);
 
   useEffect(() => {
     void load();
@@ -51,47 +76,73 @@ export function TopListPage() {
   }, [data, kind, q, t]);
 
   const title = kind === "pages" ? t("topPages") : t("trafficSources");
+  const backQs = new URLSearchParams();
+  if (day) backQs.set("day", day);
+  if (includeBots) backQs.set("bots", "1");
+  const backTo = backQs.toString() ? `/?${backQs.toString()}` : "/";
 
   return (
     <div className="wrap narrow" key={locale}>
       <header className="top">
         <div>
-          <div className="eyebrow">{site.toUpperCase()}</div>
+          <div className="eyebrow">{site}</div>
           <h1>{title}</h1>
           <p className="sub">{t("listSub")}</p>
         </div>
         <div className="top-actions">
           <LangToggle />
-          <Link className="back" to={day ? `/?day=${encodeURIComponent(day)}` : "/"}>
+          <Link className="btn ghost" to={backTo}>
             {t("backDashboard")}
           </Link>
         </div>
       </header>
 
+      <section className="toolbar" aria-label={t("filterAria")}>
+        <BotFilter
+          includeBots={includeBots}
+          onChange={(next) =>
+            patchParams({
+              kind,
+              day: day || null,
+              bots: next ? "1" : null,
+            })
+          }
+        />
+        <p className="filter-hint">
+          {includeBots ? t("filterHintBots") : t("filterHintHumans")}
+        </p>
+      </section>
+
       <nav className="nav">
         <div className="tabs">
-          <a
-            href="#"
+          <button
+            type="button"
             className={kind === "pages" ? "active" : undefined}
-            onClick={(e) => {
-              e.preventDefault();
+            onClick={() => {
               setQ("");
-              setParams({ kind: "pages", ...(day ? { day } : {}) });
+              patchParams({
+                kind: "pages",
+                day: day || null,
+                bots: includeBots ? "1" : null,
+              });
             }}
           >
             {t("pages")}
-          </a>
-          <a
-            href="#"
+          </button>
+          <button
+            type="button"
             className={kind === "refs" ? "active" : undefined}
-            onClick={(e) => {
-              e.preventDefault();
+            onClick={() => {
               setQ("");
-              setParams({ kind: "refs", ...(day ? { day } : {}) });
+              patchParams({
+                kind: "refs",
+                day: day || null,
+                bots: includeBots ? "1" : null,
+              });
             }}
           >
             {t("sources")}
-          </a>
+          </button>
         </div>
         <div className="nav-day">
           <span className="day-meta">
@@ -101,7 +152,11 @@ export function TopListPage() {
             value={data?.day || day || ""}
             onChange={(e) => {
               setQ("");
-              setParams({ kind, day: e.target.value });
+              patchParams({
+                kind,
+                day: e.target.value,
+                bots: includeBots ? "1" : null,
+              });
             }}
           >
             {[...(data?.available_days || [])].reverse().map((d) => (
@@ -113,7 +168,7 @@ export function TopListPage() {
         </div>
       </nav>
 
-      {error ? <div className="error">{t("listLoadError", { error })}</div> : null}
+      {error ? <div className="error" role="alert">{t("listLoadError", { error })}</div> : null}
 
       <section className="card">
         <div className="search">

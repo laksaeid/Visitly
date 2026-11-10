@@ -7,7 +7,7 @@ export function LangToggle({ className = "lang-toggle" }: { className?: string }
   return (
     <button
       type="button"
-      className={className}
+      className={`${className} btn ghost`}
       onClick={toggleLocale}
       aria-label={t("langAria")}
       title={t("langAria")}

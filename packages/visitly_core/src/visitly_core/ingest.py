@@ -45,7 +45,7 @@ def record(session: Session, salt: str, rec: Dict[str, Any], page_only: bool = F
             "bot_pageviews": classified["bot_pageviews"],
         },
     )
-    if classified["human"]:
+    if classified["is_page"]:
         session.execute(
             text(
                 """
