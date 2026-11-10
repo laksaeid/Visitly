@@ -581,10 +581,14 @@ def _insert_stats_location(text: str, block: str, site_hosts: str) -> str:
             continue
         body = text[start : end + 1]
         body_l = body.lower()
-        if hosts and any(host in body_l for host in hosts):
-            chosen_start, chosen_end = start, end
-            break
-        if chosen_start is None and "server_name" in body_l:
+        # Match server_name tokens only (avoid mail.example.com matching example.com).
+        if hosts:
+            sn = re.search(r"server_name\s+([^;]+);", body_l)
+            names = set(re.findall(r"[a-z0-9.-]+", sn.group(1))) if sn else set()
+            if any(host in names for host in hosts):
+                chosen_start, chosen_end = start, end
+                break
+        if chosen_start is None and "server_name" in body_l and "listen" in body_l:
             chosen_start, chosen_end = start, end
 
     if chosen_start is None or chosen_end is None:
